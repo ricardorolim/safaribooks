@@ -1,29 +1,38 @@
+# run with uv run --with browser_cookie3 python retrieve_cookies.py
 import json
+import browser_cookie3
 
-# See: https://github.com/lorenzodifuccia/safaribooks/issues/358
+BROWSERS = [
+    browser_cookie3.chrome,
+    browser_cookie3.chromium,
+    browser_cookie3.vivaldi,
+    browser_cookie3.brave,
+    browser_cookie3.opera,
+    browser_cookie3.edge,
+    browser_cookie3.firefox,
+]
 
-try:
-    from safaribooks import COOKIES_FILE
-except ImportError:
-    COOKIES_FILE = "cookies.json"
+domain = "oreilly.com"
+all_cookies = {}
 
-try:
-    import browser_cookie3
-except ImportError:
-    raise ImportError("Please run this program via: uv run --with browser_cookie3 python retrieve_cookies.py")
 
-def get_oreilly_cookies():
-    cj = browser_cookie3.load()
-    cookies = {}
-    for c in cj:
-        cookies[c.name] = c.value
-    return cookies
+print(f"Retrieving browser cookies for {domain}\n")
 
-def main():
-    cookies = get_oreilly_cookies()
-    with open(COOKIES_FILE, "w") as f:
-        json.dump(cookies, f)
-    print(f"Cookies saved to {COOKIES_FILE}")
+for loader in BROWSERS:
+    name = loader.__name__
+    try:
+        print(f"Trying {name}...")
+        cj = loader(domain_name=domain)
+        for cookie in cj:
+            all_cookies[cookie.name] = cookie.value
+        print(f"  - Loaded {len(cj)} cookies")
 
-if __name__ == "__main__":
-    main()
+        if all_cookies:
+            break
+    except Exception as e:
+        print(f"  - {name} failed: {e}")
+
+with open("cookies.json", "w") as f:
+    json.dump(all_cookies, f, indent=2)
+
+print(f"\nFinished. Total cookies collected: {len(all_cookies)}")

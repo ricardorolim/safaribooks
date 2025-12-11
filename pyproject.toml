@@ -1,0 +1,10 @@
+[project]
+name = "safaribooks"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[project.scripts]
+safaribooks = "safaribooks.__main__:main"
+
+[tool.uv]
+package = true

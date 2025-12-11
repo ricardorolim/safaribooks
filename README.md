@@ -111,46 +111,40 @@ In this case, I suggest you to convert the `EPUB` to `AZW3` with Calibre or to `
 ## Examples:
   * ## Download [Test-Driven Development with Python, 2nd Edition](https://www.safaribooksonline.com/library/view/test-driven-development-with/9781491958698/):  
     ```shell
-    $ python3 safaribooks.py --cred "my_email@gmail.com:MyPassword1!" 9781491958698
-
-           ____     ___         _ 
+    $ uv run --with browser_cookie3 python retrieve_cookies.py
+    $ uv run safaribooks 9781491958698
+    
+           ____     ___         _
           / __/__ _/ _/__ _____(_)
-         _\ \/ _ `/ _/ _ `/ __/ / 
-        /___/\_,_/_/ \_,_/_/ /_/  
+         _\ \/ _ `/ _/ _ `/ __/ /
+        /___/\_,_/_/ \_,_/_/ /_/
           / _ )___  ___  / /__ ___
          / _  / _ \/ _ \/  '_/(_-<
         /____/\___/\___/_/\_\/___/
-
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [-] Logging into Safari Books Online...
-    [*] Retrieving book info... 
-    [-] Title: Test-Driven Development with Python, 2nd Edition                     
-    [-] Authors: Harry J.W. Percival                                                
-    [-] Identifier: 9781491958698                                                   
-    [-] ISBN: 9781491958704                                                         
-    [-] Publishers: O'Reilly Media, Inc.                                            
-    [-] Rights: Copyright © O'Reilly Media, Inc.                                    
-    [-] Description: By taking you through the development of a real web application 
-    from beginning to end, the second edition of this hands-on guide demonstrates the 
-    practical advantages of test-driven development (TDD) with Python. You’ll learn 
-    how to write and run tests before building each part of your app, and then develop
-    the minimum amount of code required to pass those tests. The result? Clean code
-    that works.In the process, you’ll learn the basics of Django, Selenium, Git, 
-    jQuery, and Mock, along with curre...
-    [-] Release Date: 2017-08-18
-    [-] URL: https://learning.oreilly.com/library/view/test-driven-development-with/9781491958698/
-    [*] Retrieving book chapters...                                                 
-    [*] Output directory:                                                           
-        /XXXX/safaribooks/Books/Test-Driven Development with Python 2nd Edition (9781491958698)
-    [-] Downloading book contents... (53 chapters)                                  
-        [#####################################################################] 100%
-    [-] Downloading book CSSs... (2 files)                                          
-        [#####################################################################] 100%
-    [-] Downloading book images... (142 files)                                      
-        [#####################################################################] 100%
-    [-] Creating EPUB file...                                                       
-    [*] Done: /XXXX/safaribooks/Books/Test-Driven Development with Python 2nd Edition 
-    (9781491958698)/9781491958698.epub
+    
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [-] Successfully authenticated.
+    [*] Retrieving book info...
+    [-] Title: Test-Driven Development with Python, 2nd Edition
+    [-] Authors: Harry Percival
+    [-] Identifier: 9781491958698
+    [-] ISBN: 9781491958650
+    [-] Publishers: O'Reilly Media, Inc.
+    [-] Rights:
+    [-] Description: By taking you through the development of a real web application from beginning to end, the second edition of this hands-on guide demonstrates the practical advantages of test-driven development (TDD) with Python. You’ll learn how to write and run tests before building each part of your app, and then develop the minimum amount of code required to pass those tests. The result? Clean code that works.In the process, you’ll learn the basics of Django, Selenium, Git, jQuery, and Mock, along with curre...
+    [-] Release Date: 2017-08-02
+    [-] URL: https://learning.oreilly.com/library/view/testdriven-development-with/9781491958698/
+    [*] Retrieving book chapters...
+    [*] Output directory:
+        /XXX/safaribooks/Books/Test-Driven Development with Python 2nd Edition (9781491958698)
+    [-] Downloading book contents... (52 chapters)
+        [###############################################################################################################################################################################################################################################################################] 100%
+    [-] Downloading book CSSs... (1 files)
+        [###############################################################################################################################################################################################################################################################################] 100%
+    [-] Downloading book images... (142 files)
+        [###############################################################################################################################################################################################################################################################################] 100%
+    [-] Creating EPUB file...
+    [*] Done: /XXX/safaribooks/Books/Test-Driven Development with Python 2nd Edition (9781491958698)/9781491958698.epub
     
         If you like it, please * this project on GitHub to make it known:
             https://github.com/lorenzodifuccia/safaribooks

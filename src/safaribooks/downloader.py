@@ -20,47 +20,45 @@ USE_PROXY = False
 PROXIES = {"https": "https://127.0.0.1:8080"}
 COOKIES_FILE = "cookies.json"
 
+LOGIN_URL = f"https://www.{urls.ORLY_DOMAIN}/member/login/"
+LOGIN_ENTRY_URL = urls.SAFARI_BASE_URL + "/login/unified/?next=/home/"
+API_TEMPLATE = urls.SAFARI_BASE_URL + "/api/v1/book/{0}/"
+
+BASE_01_HTML = (
+    "<!DOCTYPE html>\n"
+    '<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"'
+    ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
+    ' xsi:schemaLocation="http://www.w3.org/2002/06/xhtml2/'
+    ' http://www.w3.org/MarkUp/SCHEMA/xhtml2.xsd"'
+    ' xmlns:epub="http://www.idpf.org/2007/ops">\n'
+    "<head>\n"
+    "{0}\n"
+    '<style type="text/css">'
+    "body{{margin:1em;background-color:transparent!important;}}"
+    "#sbo-rt-content *{{text-indent:0pt!important;}}#sbo-rt-content .bq{{margin-right:1em!important;}}"
+)
+
+KINDLE_HTML = (
+    "#sbo-rt-content *{{word-wrap:break-word!important;"
+    "word-break:break-word!important;}}#sbo-rt-content table,#sbo-rt-content pre"
+    "{{overflow-x:unset!important;overflow:unset!important;"
+    "overflow-y:unset!important;white-space:pre-wrap!important;}}"
+)
+
+BASE_02_HTML = "</style></head>\n<body>{1}</body>\n</html>"
+
+HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": LOGIN_ENTRY_URL,
+    "Upgrade-Insecure-Requests": "1",
+    "User-Agent":   "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+}
+
+COOKIE_FLOAT_MAX_AGE_PATTERN = re.compile(r"(max-age=\d*\.\d*)", re.IGNORECASE)
 
 class Downloader:
-    LOGIN_URL = f"https://www.{urls.ORLY_DOMAIN}/member/login/"
-    LOGIN_ENTRY_URL = urls.SAFARI_BASE_URL + "/login/unified/?next=/home/"
-
-    API_TEMPLATE = urls.SAFARI_BASE_URL + "/api/v1/book/{0}/"
-
-    BASE_01_HTML = (
-        "<!DOCTYPE html>\n"
-        '<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"'
-        ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
-        ' xsi:schemaLocation="http://www.w3.org/2002/06/xhtml2/'
-        ' http://www.w3.org/MarkUp/SCHEMA/xhtml2.xsd"'
-        ' xmlns:epub="http://www.idpf.org/2007/ops">\n'
-        "<head>\n"
-        "{0}\n"
-        '<style type="text/css">'
-        "body{{margin:1em;background-color:transparent!important;}}"
-        "#sbo-rt-content *{{text-indent:0pt!important;}}#sbo-rt-content .bq{{margin-right:1em!important;}}"
-    )
-
-    KINDLE_HTML = (
-        "#sbo-rt-content *{{word-wrap:break-word!important;"
-        "word-break:break-word!important;}}#sbo-rt-content table,#sbo-rt-content pre"
-        "{{overflow-x:unset!important;overflow:unset!important;"
-        "overflow-y:unset!important;white-space:pre-wrap!important;}}"
-    )
-
-    BASE_02_HTML = "</style></head>\n<body>{1}</body>\n</html>"
-
-    HEADERS = {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-        "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": LOGIN_ENTRY_URL,
-        "Upgrade-Insecure-Requests": "1",
-        "User-Agent":   "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
-    }
-
-    COOKIE_FLOAT_MAX_AGE_PATTERN = re.compile(r"(max-age=\d*\.\d*)", re.IGNORECASE)
-
     def __init__(self, args, book_id: str, cred: tuple[str, str]):
         self.args = args
         self.book_id = book_id
@@ -74,7 +72,7 @@ class Downloader:
         self.display.intro()
         self.login()
 
-        self.api_url = self.API_TEMPLATE.format(self.book_id)
+        self.api_url = API_TEMPLATE.format(self.book_id)
 
         self.display.info("Retrieving book info...")
         book_info = self.get_book_info()
@@ -107,10 +105,10 @@ class Downloader:
             "Downloading book contents... (%s chapters)" % len(book_chapters),
             state=True,
         )
-        self.BASE_HTML = (
-            self.BASE_01_HTML
-            + (self.KINDLE_HTML if not self.args.kindle else "")
-            + self.BASE_02_HTML
+        self.base_html = (
+            BASE_01_HTML
+            + (KINDLE_HTML if not self.args.kindle else "")
+            + BASE_02_HTML
         )
 
         base_url = book_info["web_url"]
@@ -191,7 +189,7 @@ class Downloader:
             self.session.proxies = PROXIES
             self.session.verify = False
 
-        self.session.headers.update(self.HEADERS)
+        self.session.headers.update(HEADERS)
 
         self.jwt = {}
 
@@ -215,7 +213,7 @@ class Downloader:
     def handle_cookie_update(self, set_cookie_headers):
         for morsel in set_cookie_headers:
             # Handle Float 'max-age' Cookie
-            if self.COOKIE_FLOAT_MAX_AGE_PATTERN.search(morsel):
+            if COOKIE_FLOAT_MAX_AGE_PATTERN.search(morsel):
                 cookie_key, cookie_value = morsel.split(";")[0].split("=")
                 self.session.cookies.set(cookie_key, cookie_value)
 
@@ -264,7 +262,7 @@ class Downloader:
         return response
 
     def do_login(self, email: str, password: str):
-        response = self.requests_provider(self.LOGIN_ENTRY_URL)
+        response = self.requests_provider(LOGIN_ENTRY_URL)
         if not response:
             self.display.exit(
                 "Login: unable to reach Safari Books Online. Try again..."
@@ -287,7 +285,7 @@ class Downloader:
         redirect_uri = urls.API_ORIGIN_URL + quote_plus(next_parameter)
 
         response = self.requests_provider(
-            self.LOGIN_URL,
+            LOGIN_URL,
             is_post=True,
             json={"email": email, "password": password, "redirect_uri": redirect_uri},
             perform_redirect=False,
@@ -494,7 +492,7 @@ class Downloader:
     def save_page_html(self, book_path: str, filename, css, xhtml):
         filename = filename.replace(".html", ".xhtml")
         open(os.path.join(book_path, "OEBPS", filename), "wb").write(
-            self.BASE_HTML.format(css, xhtml).encode("utf-8", "xmlcharrefreplace")
+            self.base_html.format(css, xhtml).encode("utf-8", "xmlcharrefreplace")
         )
         self.display.log("Created: %s" % filename)
 

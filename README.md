@@ -23,72 +23,65 @@ Before any usage please read the *O'Reilly*'s [Terms of Service](https://learnin
   * [Example: Use or not the `--kindle` option](#use-or-not-the---kindle-option)
 
 ## Requirements & Setup:
-First of all, it requires `python3` and `pip3` or `pipenv` to be installed.  
+First of all, it requires `python3` to be installed.  
 ```shell
-$ git clone https://github.com/lorenzodifuccia/safaribooks.git
+$ git clone https://github.com/ricardorolim/safaribooks.git
 Cloning into 'safaribooks'...
 
 $ cd safaribooks/
-$ pip3 install -r requirements.txt
+```
+### uv
+With uv, you don't need to worry about installing any packages beforehand or setting up a virtual environment. Skip to the usage section.
+### pip
+If you prefer to use `pip3`, install required packages with:
+```
+$ python -m venv .venv
+$ source .venv/bin/activate   # Windows: .venv\Scripts\activate
+$ pip install -r requirements.txt
+```
 
-OR
-
-$ pipenv install && pipenv shell
-```  
-
-The program depends of only two **Python _3_** modules:
+The program depends of only three **Python _3_** modules:
 ```python3
 lxml>=4.1.1
 requests>=2.20.0
+browser-cookie3==0.20.1
 ```
-  
-## Usage:
-It's really simple to use, just choose a book from the library and replace in the following command:
-  * X-es with its ID, 
-  * `email:password` with your own. 
 
+## Usage:
+First login to the OReilly platform in your browser and then download the cookies to the local directory:
+```
+$ uv run --with browser_cookie3 python retrieve_cookies.py
+```
+
+Then, just choose a book from the library and replace XXXXXXXXXXXXX in the following command with its ID:
 ```shell
-$ python3 safaribooks.py --cred "account_mail@mail.com:password01" XXXXXXXXXXXXX
+$ uv run safaribooks XXXXXXXXXXXXX
 ```
 
 The ID is the digits that you find in the URL of the book description page:  
-`https://www.safaribooksonline.com/library/view/book-name/XXXXXXXXXXXXX/`  
-Like: `https://www.safaribooksonline.com/library/view/test-driven-development-with/9781491958698/`  
+`https://learning.oreilly.com/library/view/test-driven-development-with/XXXXXXXXXXXXX/`. 
+Like: `https://learning.oreilly.com/library/view/test-driven-development-with/9781491958698/`  
   
 #### Program options:
 ```shell
-$ python3 safaribooks.py --help
-usage: safaribooks.py [--cred <EMAIL:PASS> | --login] [--no-cookies]
-                      [--kindle] [--preserve-log] [--help]
-                      <BOOK ID>
+$ uv run safaribooks --help
+usage: safaribooks.py [--cred <EMAIL:PASS> | --login] [--no-cookies] [--kindle] [--preserve-log] [--help] <BOOK ID>
 
 Download and generate an EPUB of your favorite books from Safari Books Online.
 
 positional arguments:
-  <BOOK ID>            Book digits ID that you want to download. You can find
-                       it in the URL (X-es):
-                       `https://learning.oreilly.com/library/view/book-
-                       name/XXXXXXXXXXXXX/`
+  <BOOK ID>            Book digits ID that you want to download. You can find it in the URL (X-es): `https://learning.oreilly.com/library/view/book-name/XXXXXXXXXXXXX/`
 
-optional arguments:
-  --cred <EMAIL:PASS>  Credentials used to perform the auth login on Safari
-                       Books Online. Es. ` --cred
-                       "account_mail@mail.com:password01" `.
-  --login              Prompt for credentials used to perform the auth login
-                       on Safari Books Online.
-  --no-cookies         Prevent your session data to be saved into
-                       `cookies.json` file.
-  --kindle             Add some CSS rules that block overflow on `table` and
-                       `pre` elements. Use this option if you're going to
-                       export the EPUB to E-Readers like Amazon Kindle.
-  --preserve-log       Leave the `info_XXXXXXXXXXXXX.log` file even if there
-                       isn't any error.
+options:
+  --cred <EMAIL:PASS>  Credentials used to perform the auth login on Safari Books Online. Es. ` --cred "account_mail@mail.com:password01" `.
+  --login              Prompt for credentials used to perform the auth login on Safari Books Online.
+  --no-cookies         Prevent your session data to be saved into `cookies.json` file.
+  --kindle             Add some CSS rules that block overflow on `table` and `pre` elements. Use this option if you're going to export the EPUB to E-Readers like Amazon Kindle.
+  --preserve-log       Leave the `info_XXXXXXXXXXXXX.log` file even if there isn't any error.
   --help               Show this help message.
 ```
   
-The first time you use the program, you'll have to specify your Safari Books Online account credentials (look [`here`](/../../issues/15) for special character).  
-The next times you'll download a book, before session expires, you can omit the credential, because the program save your session cookies in a file called `cookies.json`.  
-For **SSO**, please use the `sso_cookies.py` program in order to create the `cookies.json` file from the SSO cookies retrieved by your browser session (please follow [`these steps`](/../../issues/150#issuecomment-555423085)).  
+Please use the `retrieve_cookies.py` program in order to create the `cookies.json` file from the SSO cookies retrieved by your browser session (or follow [`these steps`](/../../issues/150#issuecomment-555423085)).  
   
 Pay attention if you use a shared PC, because everyone that has access to your files can steal your session. 
 If you don't want to cache the cookies, just use the `--no-cookies` option and provide all time your credential through the `--cred` option or the more safe `--login` one: this will prompt you for credential during the script execution.
@@ -152,14 +145,14 @@ In this case, I suggest you to convert the `EPUB` to `AZW3` with Calibre or to `
             https://learning.oreilly.com
     
     [!] Bye!!
-    ```  
+    ```
      The result will be (opening the `EPUB` file with Calibre):  
 
     ![Book Appearance](https://github.com/lorenzodifuccia/cloudflare/raw/master/Images/safaribooks/safaribooks_example01_TDD.png "Book opened with Calibre")  
- 
+  
   * ## Use or not the `--kindle` option:
     ```bash
-    $ python3 safaribooks.py --kindle 9781491958698
+    $ uv run safaribooks --kindle 9781491958698
     ```  
     On the right, the book created with `--kindle` option, on the left without (default):  
     

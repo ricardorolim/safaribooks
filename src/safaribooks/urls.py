@@ -1,0 +1,10 @@
+ORLY_DOMAIN = "oreilly.com"
+
+SAFARI_BASE_HOST = "learning." + ORLY_DOMAIN
+API_ORIGIN_HOST = "api." + ORLY_DOMAIN
+
+LEARNING_BASE_URL = "https://learning." + ORLY_DOMAIN
+SAFARI_BASE_URL = "https://" + SAFARI_BASE_HOST
+API_ORIGIN_URL = "https://" + API_ORIGIN_HOST
+PROFILE_URL = SAFARI_BASE_URL + "/profile/"
+

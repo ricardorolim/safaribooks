@@ -1,13 +1,6 @@
 import argparse
 
-ORLY_BASE_HOST = "oreilly.com"  # PLEASE INSERT URL HERE
-
-SAFARI_BASE_HOST = "learning." + ORLY_BASE_HOST
-
-SAFARI_BASE_URL = "https://" + SAFARI_BASE_HOST
-
-
-def parse_args() -> argparse.Namespace:
+def parse_args(orly_base_url: str) -> argparse.Namespace:
     arguments = argparse.ArgumentParser(
         prog="safaribooks.py",
         description="Download and generate an EPUB of your favorite books"
@@ -59,7 +52,7 @@ def parse_args() -> argparse.Namespace:
         "bookid",
         metavar="<BOOK ID>",
         help="Book digits ID that you want to download. You can find it in the URL (X-es):"
-        " `" + SAFARI_BASE_URL + "/library/view/book-name/XXXXXXXXXXXXX/`",
+        f" `{orly_base_url}/library/view/book-name/XXXXXXXXXXXXX/`",
     )
 
     args_parsed = arguments.parse_args()
@@ -72,26 +65,6 @@ def parse_args() -> argparse.Namespace:
         )
         arguments.exit()
 
-        # user_email = ""
-        # pre_cred = ""
-
-        # if args_parsed.cred:
-        #     pre_cred = args_parsed.cred
-
-        # else:
-        #     user_email = input("Email: ")
-        #     passwd = getpass.getpass("Password: ")
-        #     pre_cred = user_email + ":" + passwd
-
-        # parsed_cred = parse_cred(pre_cred)
-
-        # if not parsed_cred:
-        #     arguments.error("invalid credential: %s" % (
-        #         args_parsed.cred if args_parsed.cred else (user_email + ":*******")
-        #     ))
-
-        # args_parsed.cred = parsed_cred
-
     else:
         if args_parsed.no_cookies:
             arguments.error(
@@ -99,17 +72,3 @@ def parse_args() -> argparse.Namespace:
             )
 
     return args_parsed
-
-
-def parse_cred(cred):
-    if ":" not in cred:
-        return False
-
-    sep = cred.index(":")
-    new_cred = ["", ""]
-    new_cred[0] = cred[:sep].strip("'").strip('"')
-    if "@" not in new_cred[0]:
-        return False
-
-    new_cred[1] = cred[sep + 1 :]
-    return new_cred

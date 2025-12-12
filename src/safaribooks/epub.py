@@ -1,14 +1,12 @@
 import os
 import shutil
 from html import escape
-from pathlib import Path
 
 from lxml.html import HtmlElement
 
 from safaribooks.display import Display
+from safaribooks.project_root import project_root
 from safaribooks.toc import TableOfContents
-
-PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 CONTAINER_XML = (
     '<?xml version="1.0"?>'
@@ -110,7 +108,7 @@ class EPub:
             )
         )
 
-        zip_file = os.path.join(PROJECT_ROOT, "Books", book_id)
+        zip_file = os.path.join(project_root(), "Books", book_id)
         if os.path.isfile(zip_file + ".zip"):
             os.remove(zip_file + ".zip")
 

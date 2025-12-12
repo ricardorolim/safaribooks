@@ -4,10 +4,10 @@ import sys
 
 from safaribooks.downloader import Downloader
 from safaribooks.argparser import parse_args
-
+from safaribooks.urls import LEARNING_BASE_URL
 
 def main() -> None:
-    args_parsed = parse_args()
+    args_parsed = parse_args(LEARNING_BASE_URL)
     safari = Downloader(args_parsed, args_parsed.bookid, args_parsed.cred)
     safari.download()
     sys.exit(0)

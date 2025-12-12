@@ -5,7 +5,6 @@ import json
 from typing import Any
 import requests
 from html import escape
-from pathlib import Path
 from multiprocessing import Process, Queue
 from urllib.parse import urljoin, urlparse, parse_qs, quote_plus
 from safaribooks.display import Display
@@ -13,31 +12,20 @@ from lxml import html
 
 from safaribooks.epub import EPub
 from safaribooks.oreilly import Oreilly
+from safaribooks.project_root import project_root
 from safaribooks.toc import TableOfContents
+import safaribooks.urls as urls
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-COOKIES_FILE = "cookies.json"
-
-ORLY_BASE_HOST = "oreilly.com"  # PLEASE INSERT URL HERE
-
-SAFARI_BASE_HOST = "learning." + ORLY_BASE_HOST
-API_ORIGIN_HOST = "api." + ORLY_BASE_HOST
-
-ORLY_BASE_URL = "https://www." + ORLY_BASE_HOST
-SAFARI_BASE_URL = "https://" + SAFARI_BASE_HOST
-API_ORIGIN_URL = "https://" + API_ORIGIN_HOST
-PROFILE_URL = SAFARI_BASE_URL + "/profile/"
-
-# DEBUG
 USE_PROXY = False
 PROXIES = {"https": "https://127.0.0.1:8080"}
+COOKIES_FILE = "cookies.json"
 
 
 class Downloader:
-    LOGIN_URL = ORLY_BASE_URL + "/member/login/"
-    LOGIN_ENTRY_URL = SAFARI_BASE_URL + "/login/unified/?next=/home/"
+    LOGIN_URL = f"https://www.{urls.ORLY_DOMAIN}/member/login/"
+    LOGIN_ENTRY_URL = urls.SAFARI_BASE_URL + "/login/unified/?next=/home/"
 
-    API_TEMPLATE = SAFARI_BASE_URL + "/api/v1/book/{0}/"
+    API_TEMPLATE = urls.SAFARI_BASE_URL + "/api/v1/book/{0}/"
 
     BASE_01_HTML = (
         "<!DOCTYPE html>\n"
@@ -102,7 +90,7 @@ class Downloader:
             self.escape_dirname(book_info["title"]).split(",")[:2]
         ) + " ({0})".format(self.book_id)
 
-        books_dir = os.path.join(PROJECT_ROOT, "Books")
+        books_dir = os.path.join(project_root(), "Books")
         if not os.path.isdir(books_dir):
             os.mkdir(books_dir)
 
@@ -296,7 +284,7 @@ class Downloader:
                 "Login: unable to complete login on Safari Books Online. Try again..."
             )
 
-        redirect_uri = API_ORIGIN_URL + quote_plus(next_parameter)
+        redirect_uri = urls.API_ORIGIN_URL + quote_plus(next_parameter)
 
         response = self.requests_provider(
             self.LOGIN_URL,
@@ -356,7 +344,7 @@ class Downloader:
             )
 
     def check_login(self):
-        response = self.requests_provider(PROFILE_URL, perform_redirect=False)
+        response = self.requests_provider(urls.PROFILE_URL, perform_redirect=False)
 
         if not response:
             self.display.exit(
@@ -447,7 +435,7 @@ class Downloader:
 
         root = None
         try:
-            root = html.fromstring(response.text, base_url=SAFARI_BASE_URL)
+            root = html.fromstring(response.text, base_url=urls.SAFARI_BASE_URL)
 
         except (html.etree.ParseError, html.etree.ParserError) as parsing_error:
             self.display.error(parsing_error)
@@ -523,7 +511,7 @@ class Downloader:
             api_v2_detected = False
             if "v2" in chapter["content"]:
                 asset_base_url = (
-                    SAFARI_BASE_URL
+                    urls.SAFARI_BASE_URL
                     + "/api/v2/epubs/urn:orm:book:{}/files".format(self.book_id)
                 )
                 api_v2_detected = True
@@ -633,7 +621,7 @@ class Downloader:
 
         else:
             response = self.requests_provider(
-                urljoin(SAFARI_BASE_URL, url), stream=True
+                urljoin(urls.SAFARI_BASE_URL, url), stream=True
             )
             if not response:
                 self.display.error(

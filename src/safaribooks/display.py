@@ -7,15 +7,8 @@ import traceback
 from random import random
 from typing import Any
 from lxml import html
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-
-ORLY_BASE_HOST = "oreilly.com"  # PLEASE INSERT URL HERE
-
-SAFARI_BASE_HOST = "learning." + ORLY_BASE_HOST
-SAFARI_BASE_URL = "https://" + SAFARI_BASE_HOST
-
+from safaribooks.project_root import project_root
+import safaribooks.urls as urls
 
 class Display:
     BASE_FORMAT = logging.Formatter(
@@ -32,7 +25,7 @@ class Display:
     def __init__(self, log_file, cookies_file: str):
         self.output_dir = ""
         self.output_dir_set = False
-        self.log_file = os.path.join(PROJECT_ROOT, log_file)
+        self.log_file = os.path.join(project_root(), log_file)
 
         self.cookies_file = cookies_file
 
@@ -226,7 +219,7 @@ class Display:
             "        https://github.com/lorenzodifuccia/safaribooks\n"
             "    e don't forget to renew your Safari Books Online subscription:\n"
             "        "
-            + SAFARI_BASE_URL
+            + urls.LEARNING_BASE_URL
             + "\n\n"
             + self.SH_BG_RED
             + "[!]"
@@ -240,7 +233,7 @@ class Display:
             message += (
                 "book's not present in Safari Books Online.\n"
                 "    The book identifier is the digits that you can find in the URL:\n"
-                "    `" + SAFARI_BASE_URL + "/library/view/book-name/XXXXXXXXXXXXX/`"
+                "    `" + urls.LEARNING_BASE_URL + "/library/view/book-name/XXXXXXXXXXXXX/`"
             )
 
         else:

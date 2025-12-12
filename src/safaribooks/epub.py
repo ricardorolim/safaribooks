@@ -4,7 +4,7 @@ from html import escape
 
 from lxml.html import HtmlElement
 
-from safaribooks.display import Display
+from safaribooks.logger import Logger
 from safaribooks.project_root import project_root
 from safaribooks.toc import TableOfContents
 
@@ -63,7 +63,7 @@ TOC_NCX = (
 
 
 class EPub:
-    def __init__(self, display: Display) -> None:
+    def __init__(self, display: Logger) -> None:
         self.display = display
 
     def create_epub(

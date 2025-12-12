@@ -5,7 +5,7 @@ from urllib.parse import urljoin, urlparse
 
 from lxml import html
 
-from safaribooks.display import Display
+from safaribooks.logger import Logger
 
 
 class ParsedHtml:
@@ -16,7 +16,7 @@ class ParsedHtml:
 
 
 class Oreilly:
-    def __init__(self, display: Display):
+    def __init__(self, display: Logger):
         self.display = display
 
     def parse_html(

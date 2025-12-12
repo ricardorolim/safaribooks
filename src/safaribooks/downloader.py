@@ -7,7 +7,7 @@ import requests
 from html import escape
 from multiprocessing import Process, Queue
 from urllib.parse import urljoin, urlparse, parse_qs, quote_plus
-from safaribooks.display import Display
+from safaribooks.logger import Logger
 from lxml import html
 
 from safaribooks.epub import EPub
@@ -63,22 +63,27 @@ class Downloader:
         self.args = args
         self.book_id = book_id
         self.cred = cred
-        self.display = Display("info_%s.log" % escape(self.book_id), COOKIES_FILE)
-        self.epub = EPub(self.display)
-        self.oreilly = Oreilly(self.display)
+        self.logger = Logger("info_%s.log" % escape(self.book_id), COOKIES_FILE)
+        self.epub = EPub(self.logger)
+        self.oreilly = Oreilly(self.logger)
         self.css = []
 
     def download(self):
-        self.display.intro()
+        self.api_url = API_TEMPLATE.format(self.book_id)
+        self.base_html = (
+            BASE_01_HTML
+            + (KINDLE_HTML if not self.args.kindle else "")
+            + BASE_02_HTML
+        )
+
+        self.logger.intro()
         self.login()
 
-        self.api_url = API_TEMPLATE.format(self.book_id)
-
-        self.display.info("Retrieving book info...")
+        self.logger.info("Retrieving book info...")
         book_info = self.get_book_info()
-        self.display.book_info(book_info)
+        self.logger.book_info(book_info)
 
-        self.display.info("Retrieving book chapters...")
+        self.logger.info("Retrieving book chapters...")
         book_chapters = self.get_book_chapters()
 
         if len(book_chapters) > sys.getrecursionlimit():
@@ -93,23 +98,19 @@ class Downloader:
             os.mkdir(books_dir)
 
         book_path = os.path.join(books_dir, clean_book_title)
-        self.display.set_output_dir(book_path)
+        self.create_book_dirs(book_path)
+
+        self.logger.set_output_dir(book_path)
+        self.logger.info(
+            "Downloading book contents... (%s chapters)" % len(book_chapters),
+            state=True,
+        )
+
         self.css_path = ""
         self.images_path = ""
         self.chapter_stylesheets = []
         self.css.clear()
         self.images = []
-        self.create_dirs(book_path)
-
-        self.display.info(
-            "Downloading book contents... (%s chapters)" % len(book_chapters),
-            state=True,
-        )
-        self.base_html = (
-            BASE_01_HTML
-            + (KINDLE_HTML if not self.args.kindle else "")
-            + BASE_02_HTML
-        )
 
         base_url = book_info["web_url"]
         cover = self.download_chapters(book_chapters, book_path, base_url)
@@ -120,20 +121,20 @@ class Downloader:
             )
 
         self.css_done_queue = Queue(0) if "win" not in sys.platform else WinQueue()
-        self.display.info(
+        self.logger.info(
             "Downloading book CSSs... (%s files)" % len(self.css), state=True
         )
         self.collect_css(book_path)
 
         self.images_done_queue = Queue(0) if "win" not in sys.platform else WinQueue()
-        self.display.info(
+        self.logger.info(
             "Downloading book images... (%s files)" % len(self.images), state=True
         )
         self.collect_images(book_path)
 
         toc = self.download_toc()
 
-        self.display.info("Creating EPUB file...", state=True)
+        self.logger.info("Creating EPUB file...", state=True)
         self.epub.create_epub(
             book_path=book_path,
             book_id=self.book_id,
@@ -149,11 +150,11 @@ class Downloader:
         if not self.args.no_cookies:
             json.dump(self.session.cookies.get_dict(), open(COOKIES_FILE, "w"))
 
-        self.display.done(os.path.join(book_path, self.book_id + ".epub"))
-        self.display.unregister()
+        self.logger.done(os.path.join(book_path, self.book_id + ".epub"))
+        self.logger.unregister()
 
-        if not self.display.in_error and not self.args.log:
-            os.remove(self.display.log_file)
+        if not self.logger.in_error and not self.args.log:
+            os.remove(self.logger.log_file)
 
     def create_default_cover(
         self, book_chapters, book_info, book_path: str, base_url: str
@@ -195,7 +196,7 @@ class Downloader:
 
         if not self.cred:
             if not os.path.isfile(COOKIES_FILE):
-                self.display.exit(
+                self.logger.exit(
                     "Login: unable to find `cookies.json` file.\n"
                     "    Please use the `--cred` or `--login` options to perform the login."
                 )
@@ -203,7 +204,7 @@ class Downloader:
             self.session.cookies.update(json.load(open(COOKIES_FILE)))
 
         else:
-            self.display.info("Logging into Safari Books Online...", state=True)
+            self.logger.info("Logging into Safari Books Online...", state=True)
             self.do_login(*self.cred)
             if not self.args.no_cookies:
                 json.dump(self.session.cookies.get_dict(), open(COOKIES_FILE, "w"))
@@ -232,7 +233,7 @@ class Downloader:
 
             self.handle_cookie_update(response.raw.headers.getlist("Set-Cookie"))
 
-            self.display.last_request = (
+            self.logger.last_request = (
                 url,
                 data,
                 kwargs,
@@ -246,12 +247,12 @@ class Downloader:
             requests.ConnectTimeout,
             requests.RequestException,
         ) as request_exception:
-            self.display.error(str(request_exception))
+            self.logger.error(str(request_exception))
             return
 
         if response.is_redirect and perform_redirect:
             if not response.next:
-                self.display.error("Redirect expected but no redirect URL found")
+                self.logger.error("Redirect expected but no redirect URL found")
                 return
 
             return self.requests_provider(
@@ -264,7 +265,7 @@ class Downloader:
     def do_login(self, email: str, password: str):
         response = self.requests_provider(LOGIN_ENTRY_URL)
         if not response:
-            self.display.exit(
+            self.logger.exit(
                 "Login: unable to reach Safari Books Online. Try again..."
             )
 
@@ -272,13 +273,13 @@ class Downloader:
         try:
             url = response.request.url
             if not url:
-                self.display.exit("Login: url not found in request")
+                self.logger.exit("Login: url not found in request")
 
             query = parse_qs(urlparse(url).query)
             next_parameter = query["next"][0]
 
         except (AttributeError, ValueError, IndexError):
-            self.display.exit(
+            self.logger.exit(
                 "Login: unable to complete login on Safari Books Online. Try again..."
             )
 
@@ -292,7 +293,7 @@ class Downloader:
         )
 
         if not response:
-            self.display.exit(
+            self.logger.exit(
                 "Login: unable to perform auth to Safari Books Online.\n    Try again..."
             )
 
@@ -314,11 +315,11 @@ class Downloader:
                     if recaptcha
                     else []
                 )
-                self.display.exit(
+                self.logger.exit(
                     "Login: unable to perform auth login to Safari Books Online.\n"
-                    + self.display.SH_YELLOW
+                    + self.logger.SH_YELLOW
                     + "[*]"
-                    + self.display.SH_DEFAULT
+                    + self.logger.SH_DEFAULT
                     + " Details:\n"
                     + "%s"
                     % "\n".join(
@@ -326,8 +327,8 @@ class Downloader:
                     )
                 )
             except (html.etree.ParseError, html.etree.ParserError) as parsing_error:
-                self.display.error(parsing_error)
-                self.display.exit(
+                self.logger.error(parsing_error)
+                self.logger.exit(
                     "Login: your login went wrong and it encountered in an error"
                     " trying to parse the login details of Safari Books Online. Try again..."
                 )
@@ -337,7 +338,7 @@ class Downloader:
         )  # TODO: save JWT Tokens and use the refresh_token to restore user session
         response = self.requests_provider(self.jwt["redirect_uri"])
         if not response:
-            self.display.exit(
+            self.logger.exit(
                 "Login: unable to reach Safari Books Online. Try again..."
             )
 
@@ -345,26 +346,26 @@ class Downloader:
         response = self.requests_provider(urls.PROFILE_URL, perform_redirect=False)
 
         if not response:
-            self.display.exit(
+            self.logger.exit(
                 "Login: unable to reach Safari Books Online. Try again..."
             )
 
         elif response.status_code != 200:
-            self.display.exit("Authentication issue: unable to access profile page.")
+            self.logger.exit("Authentication issue: unable to access profile page.")
 
         elif 'user_type":"Expired"' in response.text:
-            self.display.exit("Authentication issue: account subscription expired.")
+            self.logger.exit("Authentication issue: account subscription expired.")
 
-        self.display.info("Successfully authenticated.", state=True)
+        self.logger.info("Successfully authenticated.", state=True)
 
     def get_book_info(self) -> dict[str, Any]:
         response = self.requests_provider(self.api_url)
         if not response:
-            self.display.exit("API: unable to retrieve book info.")
+            self.logger.exit("API: unable to retrieve book info.")
 
         book_info = response.json()
         if not isinstance(book_info, dict) or len(book_info.keys()) == 1:
-            self.display.exit(self.display.api_error(book_info))
+            self.logger.exit(self.logger.api_error(book_info))
 
         if "last_chapter_read" in book_info:
             del book_info["last_chapter_read"]
@@ -380,15 +381,15 @@ class Downloader:
             urljoin(self.api_url, "chapter/?page=%s" % page)
         )
         if not response:
-            self.display.exit("API: unable to retrieve book chapters.")
+            self.logger.exit("API: unable to retrieve book chapters.")
 
         response = response.json()
 
         if not isinstance(response, dict) or len(response.keys()) == 1:
-            self.display.exit(self.display.api_error(response))
+            self.logger.exit(self.logger.api_error(response))
 
         if "results" not in response or not len(response["results"]):
-            self.display.exit("API: unable to retrieve book chapters.")
+            self.logger.exit("API: unable to retrieve book chapters.")
 
         if response["count"] > sys.getrecursionlimit():
             sys.setrecursionlimit(response["count"])
@@ -409,7 +410,7 @@ class Downloader:
 
         response = self.requests_provider(book_info["cover"], stream=True)
         if not response:
-            self.display.error(
+            self.logger.error(
                 "Error trying to retrieve the cover: %s" % book_info["cover"]
             )
             return None
@@ -426,7 +427,7 @@ class Downloader:
     def get_html(self, url, filename, chapter_title: str):
         response = self.requests_provider(url)
         if not response or response.status_code != 200:
-            self.display.exit(
+            self.logger.exit(
                 "Crawler: error trying to retrieve this page: %s (%s)\n    From: %s"
                 % (filename, chapter_title, url)
             )
@@ -436,8 +437,8 @@ class Downloader:
             root = html.fromstring(response.text, base_url=urls.SAFARI_BASE_URL)
 
         except (html.etree.ParseError, html.etree.ParserError) as parsing_error:
-            self.display.error(parsing_error)
-            self.display.exit(
+            self.logger.error(parsing_error)
+            self.logger.exit(
                 "Crawler: error trying to parse this page: %s (%s)\n    From: %s"
                 % (filename, chapter_title, url)
             )
@@ -461,40 +462,40 @@ class Downloader:
 
         return dirname if not clean_space else dirname.replace(" ", "")
 
-    def create_dirs(self, book_path: str):
+    def create_book_dirs(self, book_path: str):
         if os.path.isdir(book_path):
-            self.display.log("Book directory already exists: %s" % book_path)
+            self.logger.log("Book directory already exists: %s" % book_path)
 
         else:
             os.makedirs(book_path)
 
         oebps = os.path.join(book_path, "OEBPS")
         if not os.path.isdir(oebps):
-            self.display.book_ad_info = 1
+            self.logger.book_ad_info = 1
             os.makedirs(oebps)
 
         self.css_path = os.path.join(oebps, "Styles")
         if os.path.isdir(self.css_path):
-            self.display.log("CSSs directory already exists: %s" % self.css_path)
+            self.logger.log("CSSs directory already exists: %s" % self.css_path)
 
         else:
             os.makedirs(self.css_path)
-            self.display.css_ad_info.value = 1
+            self.logger.css_ad_info.value = 1
 
         self.images_path = os.path.join(oebps, "Images")
         if os.path.isdir(self.images_path):
-            self.display.log("Images directory already exists: %s" % self.images_path)
+            self.logger.log("Images directory already exists: %s" % self.images_path)
 
         else:
             os.makedirs(self.images_path)
-            self.display.images_ad_info.value = 1
+            self.logger.images_ad_info.value = 1
 
     def save_page_html(self, book_path: str, filename, css, xhtml):
         filename = filename.replace(".html", ".xhtml")
         open(os.path.join(book_path, "OEBPS", filename), "wb").write(
             self.base_html.format(css, xhtml).encode("utf-8", "xmlcharrefreplace")
         )
-        self.display.log("Created: %s" % filename)
+        self.logger.log("Created: %s" % filename)
 
     def download_chapters(
         self, book_chapters: list[html.HtmlElement], book_path: str, base_url: str
@@ -528,8 +529,8 @@ class Downloader:
                     book_path, "OEBPS", chapter_filename.replace(".html", ".xhtml")
                 )
             ):
-                if not self.display.book_ad_info and chapter not in book_chapters[:i]:
-                    self.display.info(
+                if not self.logger.book_ad_info and chapter not in book_chapters[:i]:
+                    self.logger.info(
                         (
                             "File `%s` already exists.\n"
                             "    If you want to download again all the book,\n"
@@ -539,7 +540,7 @@ class Downloader:
                         )
                         % chapter_filename.replace(".html", ".xhtml")
                     )
-                    self.display.book_ad_info = 2
+                    self.logger.book_ad_info = 2
             else:
                 first_page = i == 0
                 parsed_html = self.oreilly.parse_html(
@@ -560,7 +561,7 @@ class Downloader:
                     xhtml=parsed_html.xhtml,
                 )
 
-            self.display.state(len(book_chapters), i + 1)
+            self.logger.state(len(book_chapters), i + 1)
 
         return book_cover
 
@@ -570,10 +571,10 @@ class Downloader:
         )
         if os.path.isfile(css_file):
             if (
-                not self.display.css_ad_info.value
+                not self.logger.css_ad_info.value
                 and url not in self.css[: self.css.index(url)]
             ):
-                self.display.info(
+                self.logger.info(
                     (
                         "File `%s` already exists.\n"
                         "    If you want to download again all the CSSs,\n"
@@ -582,12 +583,12 @@ class Downloader:
                     )
                     % css_file
                 )
-                self.display.css_ad_info.value = 1
+                self.logger.css_ad_info.value = 1
 
         else:
             response = self.requests_provider(url)
             if not response:
-                self.display.error(
+                self.logger.error(
                     "Error trying to retrieve this CSS: %s\n    From: %s"
                     % (css_file, url)
                 )
@@ -596,17 +597,17 @@ class Downloader:
                     f.write(response.content)
 
         self.css_done_queue.put(1)
-        self.display.state(len(self.css), self.css_done_queue.qsize())
+        self.logger.state(len(self.css), self.css_done_queue.qsize())
 
     def _thread_download_images(self, url, book_path: str):
         image_name = url.split("/")[-1]
         image_path = os.path.join(self.images_path, image_name)
         if os.path.isfile(image_path):
             if (
-                not self.display.images_ad_info.value
+                not self.logger.images_ad_info.value
                 and url not in self.images[: self.images.index(url)]
             ):
-                self.display.info(
+                self.logger.info(
                     (
                         "File `%s` already exists.\n"
                         "    If you want to download again all the images,\n"
@@ -615,14 +616,14 @@ class Downloader:
                     )
                     % image_name
                 )
-                self.display.images_ad_info.value = 1
+                self.logger.images_ad_info.value = 1
 
         else:
             response = self.requests_provider(
                 urljoin(urls.SAFARI_BASE_URL, url), stream=True
             )
             if not response:
-                self.display.error(
+                self.logger.error(
                     "Error trying to retrieve this image: %s\n    From: %s"
                     % (image_name, url)
                 )
@@ -633,7 +634,7 @@ class Downloader:
                     img.write(chunk)
 
         self.images_done_queue.put(1)
-        self.display.state(len(self.images), self.images_done_queue.qsize())
+        self.logger.state(len(self.images), self.images_done_queue.qsize())
 
     def _start_multiprocessing(self, operation, full_queue):
         if len(full_queue) > 5:
@@ -651,15 +652,15 @@ class Downloader:
                 proc.join()
 
     def collect_css(self, book_path: str):
-        self.display.state_status.value = -1
+        self.logger.state_status.value = -1
 
         # "self._start_multiprocessing" seems to cause problem. Switching to mono-thread download.
         for css_url in self.css:
             self._thread_download_css(css_url, book_path)
 
     def collect_images(self, book_path: str):
-        if self.display.book_ad_info == 2:
-            self.display.info(
+        if self.logger.book_ad_info == 2:
+            self.logger.info(
                 "Some of the book contents were already downloaded.\n"
                 "    If you want to be sure that all the images will be downloaded,\n"
                 "    please delete the output directory '"
@@ -667,7 +668,7 @@ class Downloader:
                 + "' and restart the program."
             )
 
-        self.display.state_status.value = -1
+        self.logger.state_status.value = -1
 
         # "self._start_multiprocessing" seems to cause problem. Switching to mono-thread download.
         for image_url in self.images:
@@ -676,7 +677,7 @@ class Downloader:
     def download_toc(self) -> TableOfContents:
         response = self.requests_provider(urljoin(self.api_url, "toc/"))
         if not response:
-            self.display.exit(
+            self.logger.exit(
                 "API: unable to retrieve book chapters. "
                 "Don't delete any files, just run again this program"
                 " in order to complete the `.epub` creation!"
@@ -685,8 +686,8 @@ class Downloader:
         toc = response.json()
 
         if not isinstance(toc, list) and len(toc.keys()) == 1:
-            self.display.exit(
-                self.display.api_error(toc)
+            self.logger.exit(
+                self.logger.api_error(toc)
                 + " Don't delete any files, just run again this program"
                 " in order to complete the `.epub` creation!"
             )

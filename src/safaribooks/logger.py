@@ -10,7 +10,7 @@ from lxml import html
 from safaribooks.project_root import project_root
 import safaribooks.urls as urls
 
-class Display:
+class Logger:
     BASE_FORMAT = logging.Formatter(
         fmt="[%(asctime)s] %(message)s", datefmt="%d/%b/%Y %H:%M:%S"
     )
@@ -242,9 +242,9 @@ class Display:
                 "Out-of-Session%s.\n" % (" (%s)" % response["detail"])
                 if "detail" in response
                 else ""
-                + Display.SH_YELLOW
+                + Logger.SH_YELLOW
                 + "[+]"
-                + Display.SH_DEFAULT
+                + Logger.SH_DEFAULT
                 + " Use the `--cred` or `--login` options in order to perform the auth login to Safari."
             )
 

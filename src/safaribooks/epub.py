@@ -69,7 +69,7 @@ class EPub:
     def create_epub(
         self,
         book_path: str,
-        book_id: str,
+        book_id: int,
         toc: TableOfContents,
         book_info,
         book_title,
@@ -108,12 +108,12 @@ class EPub:
             )
         )
 
-        zip_file = os.path.join(project_root(), "Books", book_id)
+        zip_file = os.path.join(project_root(), "Books", str(book_id))
         if os.path.isfile(zip_file + ".zip"):
             os.remove(zip_file + ".zip")
 
         shutil.make_archive(zip_file, "zip", book_path)
-        os.rename(zip_file + ".zip", os.path.join(book_path, book_id) + ".epub")
+        os.rename(zip_file + ".zip", os.path.join(book_path, str(book_id)) + ".epub")
 
     def create_content_opf(
         self,
@@ -121,7 +121,7 @@ class EPub:
         images_path: str,
         book_chapters: list[HtmlElement],
         book_info: HtmlElement,
-        book_id: str,
+        book_id: int,
         book_title: str,
         cover: str,
     ) -> tuple[list[str], list[str], str]:
@@ -194,7 +194,7 @@ class EPub:
         self,
         toc: TableOfContents,
         book_info: HtmlElement,
-        book_id: str,
+        book_id: int,
         book_title: str,
     ) -> str:
         return TOC_NCX.format(

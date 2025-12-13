@@ -11,7 +11,7 @@ from safaribooks.logger import Logger
 from lxml import html
 
 from safaribooks.epub import EPub
-from safaribooks.oreilly import Oreilly
+from safaribooks.oreilly import ChapterParser
 from safaribooks.project_root import project_root
 from safaribooks.toc import TableOfContents
 import safaribooks.urls as urls
@@ -60,13 +60,13 @@ COOKIE_FLOAT_MAX_AGE_PATTERN = re.compile(r"(max-age=\d*\.\d*)", re.IGNORECASE)
 
 
 class Downloader:
-    def __init__(self, args, book_id: str, cred: tuple[str, str]):
+    def __init__(self, args, book_id: int, cred: tuple[str, str]):
         self.args = args
         self.book_id = book_id
         self.cred = cred
-        self.logger = Logger("info_%s.log" % escape(self.book_id), COOKIES_FILE)
+        self.logger = Logger("info_%s.log" % self.book_id, COOKIES_FILE)
         self.epub = EPub(self.logger)
-        self.oreilly = Oreilly(self.logger)
+        self.parser: ChapterParser | None = None
         self.css = []
         self.skipped_chapter_download = False
         self.created_chapter_directory = False
@@ -113,11 +113,12 @@ class Downloader:
         )
 
         book_base_url = book_info["web_url"]
-        cover = self.download_chapters(book_chapters, book_path, book_base_url)
+        self.parser = ChapterParser(self.logger, book_base_url, self.book_id)
+        cover = self.download_chapters(book_chapters, book_path)
 
         if not cover:
             cover, book_chapters = self.create_default_cover(
-                book_chapters, book_info, book_path, book_base_url
+                book_chapters, book_info, book_path
             )
 
         self.css_done_queue = Queue(0) if "win" not in sys.platform else WinQueue()
@@ -150,17 +151,18 @@ class Downloader:
         if not self.args.no_cookies:
             json.dump(self.session.cookies.get_dict(), open(COOKIES_FILE, "w"))
 
-        self.logger.done(os.path.join(book_path, self.book_id + ".epub"))
+        self.logger.done(os.path.join(book_path, str(self.book_id) + ".epub"))
         self.logger.unregister()
 
         if not self.logger.in_error and not self.args.log:
             os.remove(self.logger.log_file)
 
     def create_default_cover(
-        self, book_chapters, book_info, book_path: str, base_url: str
+        self, book_chapters, book_info, book_path: str
     ) -> tuple[str | None, list[dict[str, str]]]:
         cover = self.get_default_cover(book_info)
-        parsed_html = self.oreilly.parse_html(
+        assert self.parser is not None
+        parsed_html = self.parser.parse_html(
             html.fromstring(
                 '<div id="sbo-rt-content"><img src="Images/{0}"></div>'.format(cover)
             ),
@@ -169,8 +171,6 @@ class Downloader:
             chapter_title="",
             chapter_stylesheets=[],
             css_list=self.css,
-            base_url=base_url,
-            book_id=self.book_id,
         )
 
         book_chapters = [
@@ -488,7 +488,7 @@ class Downloader:
         self.logger.log("Created: %s" % filename)
 
     def download_chapters(
-        self, book_chapters: list[html.HtmlElement], book_path: str, book_base_url: str
+        self, book_chapters: list[html.HtmlElement], book_path: str
     ) -> str | None:
         book_cover = None
 
@@ -505,15 +505,14 @@ class Downloader:
                 chapter_html = self.get_html(
                     chapter["content"], chapter_filename, chapter_title
                 )
-                parsed_html = self.oreilly.parse_html(
+                assert self.parser is not None
+                parsed_html = self.parser.parse_html(
                     chapter_html,
                     is_first_page,
                     chapter_filename,
                     chapter_title,
                     self.chapter_stylesheets,
                     self.css,
-                    book_base_url,
-                    self.book_id,
                 )
 
                 book_cover = parsed_html.cover_url

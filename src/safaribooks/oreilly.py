@@ -15,28 +15,28 @@ class ParsedHtml:
         self.xhtml = xhtml
 
 
-class Oreilly:
-    def __init__(self, display: Logger):
-        self.display = display
+class ChapterParser:
+    def __init__(self, display: Logger, base_url: str, book_id: int):
+        self.logger = display
+        self.base_url = base_url
+        self.book_id = book_id
 
     def parse_html(
         self,
         root: html.HtmlElement,
-        first_page: bool,
+        is_first_page: bool,
         html_filename: str,
         chapter_title: str,
         chapter_stylesheets: list[str],
         css_list: list[str],
-        base_url: str,
-        book_id: str,
     ) -> ParsedHtml:
         if root.xpath("//div[@class='controls']/a/text()"):
             if random() > 0.8:
-                self.display.exit(self.display.api_error(" "))
+                self.logger.exit(self.logger.api_error(" "))
 
         book_content: list[html.HtmlElement] = root.xpath("//div[@id='sbo-rt-content']")
         if not book_content:
-            self.display.exit(
+            self.logger.exit(
                 "Parser: book content's corrupted or not present: %s (%s)"
                 % (html_filename, chapter_title)
             )
@@ -45,7 +45,7 @@ class Oreilly:
         for chapter_css_url in chapter_stylesheets:
             if chapter_css_url not in css_list:
                 css_list.append(chapter_css_url)
-                self.display.log("Crawler: found a new CSS at %s" % chapter_css_url)
+                self.logger.log("Crawler: found a new CSS at %s" % chapter_css_url)
 
             page_css += (
                 '<link href="Styles/Style{0:0>2}.css" '
@@ -61,12 +61,12 @@ class Oreilly:
             css_url = (
                 urljoin("https:", e.attrib["href"])
                 if e.attrib["href"][:2] == "//"
-                else urljoin(base_url, e.attrib["href"])
+                else urljoin(self.base_url, e.attrib["href"])
             )
 
             if css_url not in css_list:
                 css_list.append(css_url)
-                self.display.log("Crawler: found a new CSS at %s" % css_url)
+                self.logger.log("Crawler: found a new CSS at %s" % css_url)
 
             page_css += (
                 '<link href="Styles/Style{0:0>2}.css" '
@@ -84,8 +84,8 @@ class Oreilly:
                 page_css += cast(str, e) + "\n"
 
             except (html.etree.ParseError, html.etree.ParserError) as parsing_error:
-                self.display.error(parsing_error)
-                self.display.exit(
+                self.logger.error(parsing_error)
+                self.logger.exit(
                     "Parser: error trying to parse one CSS found in this page: %s (%s)"
                     % (html_filename, chapter_title)
                 )
@@ -103,13 +103,13 @@ class Oreilly:
                 svg_root.append(new_img)
 
         book_content = cast(html.HtmlElement, book_content[0])
-        book_content.rewrite_links(lambda link: self.link_replace(link, book_id))
+        book_content.rewrite_links(lambda link: self.link_replace(link, self.book_id))
 
         cover_url: str | None = None
         xhtml = None
 
         try:
-            if first_page:
+            if is_first_page:
                 cover_url, page_css, book_content = self.make_cover(
                     page_css, book_content
                 )
@@ -118,8 +118,8 @@ class Oreilly:
             xhtml = str(xhtml)
 
         except (html.etree.ParseError, html.etree.ParserError) as parsing_error:
-            self.display.error(parsing_error)
-            self.display.exit(
+            self.logger.error(parsing_error)
+            self.logger.exit(
                 "Parser: error trying to parse HTML of this page: %s (%s)"
                 % (html_filename, chapter_title)
             )
@@ -159,7 +159,7 @@ class Oreilly:
     def is_image_link(url: str) -> bool:
         return pathlib.Path(url).suffix[1:].lower() in ["jpg", "jpeg", "png", "gif"]
 
-    def link_replace(self, link: str, book_id: str) -> str:
+    def link_replace(self, link: str, book_id: int) -> str:
         if link and not link.startswith("mailto"):
             if not self.url_is_absolute(link):
                 if any(
@@ -170,8 +170,8 @@ class Oreilly:
 
                 return link.replace(".html", ".xhtml")
 
-            elif book_id in link:
-                return self.link_replace(link.split(book_id)[-1], book_id)
+            elif str(book_id) in link:
+                return self.link_replace(link.split(str(book_id))[-1], book_id)
 
         return link
 

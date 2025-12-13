@@ -1,8 +1,7 @@
 import os
 import shutil
 from html import escape
-
-from lxml.html import HtmlElement
+from typing import Any
 
 from safaribooks.logger import Logger
 from safaribooks.project_root import project_root
@@ -63,32 +62,34 @@ TOC_NCX = (
 
 
 class EPub:
-    def __init__(self, display: Logger) -> None:
-        self.display = display
+    def __init__(self, logger: Logger) -> None:
+        self.logger = logger
 
     def create_epub(
         self,
         book_path: str,
         book_id: int,
         toc: TableOfContents,
-        book_info,
-        book_title,
-        css_path,
-        images_path,
-        book_chapters,
-        cover,
+        book_info: dict[str, Any],
+        book_title: str,
+        css_path: str,
+        images_path: str,
+        book_chapters: list[dict[str, Any]],
+        cover: str,
     ):
         open(os.path.join(book_path, "mimetype"), "w").write("application/epub+zip")
+
         meta_info = os.path.join(book_path, "META-INF")
         if os.path.isdir(meta_info):
-            self.display.log("META-INF directory already exists: %s" % meta_info)
+            self.logger.log("META-INF directory already exists: %s" % meta_info)
         else:
             os.makedirs(meta_info)
 
         open(os.path.join(meta_info, "container.xml"), "wb").write(
             CONTAINER_XML.encode("utf-8", "xmlcharrefreplace")
         )
-        _, _, content = self.create_content_opf(
+
+        content = self.create_content_opf(
             css_path,
             images_path,
             book_chapters,
@@ -119,12 +120,12 @@ class EPub:
         self,
         css_path: str,
         images_path: str,
-        book_chapters: list[HtmlElement],
-        book_info: HtmlElement,
+        book_chapters: list[dict[str, Any]],
+        book_info: dict[str, Any],
         book_id: int,
         book_title: str,
         cover: str,
-    ) -> tuple[list[str], list[str], str]:
+    ) -> str:
         css = next(os.walk(css_path))[2]
         images = next(os.walk(images_path))[2]
 
@@ -168,32 +169,27 @@ class EPub:
             for sub in book_info.get("subjects", [])
         )
 
-        return (
-            css,
-            images,
-            CONTENT_OPF.format(
-                (book_info.get("isbn", book_id)),
-                escape(book_title),
-                authors,
-                escape(book_info.get("description", "")),
-                subjects,
-                ", ".join(
-                    escape(pub.get("name", ""))
-                    for pub in book_info.get("publishers", [])
-                ),
-                escape(book_info.get("rights", "")),
-                book_info.get("issued", ""),
-                cover,
-                "\n".join(manifest),
-                "\n".join(spine),
-                book_chapters[0]["filename"].replace(".html", ".xhtml"),
+        return CONTENT_OPF.format(
+            (book_info.get("isbn", book_id)),
+            escape(book_title),
+            authors,
+            escape(book_info.get("description", "")),
+            subjects,
+            ", ".join(
+                escape(pub.get("name", "")) for pub in book_info.get("publishers", [])
             ),
+            escape(book_info.get("rights", "")),
+            book_info.get("issued", ""),
+            cover,
+            "\n".join(manifest),
+            "\n".join(spine),
+            book_chapters[0]["filename"].replace(".html", ".xhtml"),
         )
 
     def create_toc(
         self,
         toc: TableOfContents,
-        book_info: HtmlElement,
+        book_info: dict[str, Any],
         book_id: int,
         book_title: str,
     ) -> str:

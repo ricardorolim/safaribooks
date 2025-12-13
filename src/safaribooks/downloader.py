@@ -45,6 +45,8 @@ KINDLE_HTML = (
 BASE_02_HTML = "</style></head>\n<body>{1}</body>\n</html>"
 
 
+Chapter = dict[str, Any]
+
 
 class Downloader:
     def __init__(self, args, book_id: int) -> None:
@@ -147,15 +149,16 @@ class Downloader:
             os.remove(self.logger.log_file)
 
     def create_default_cover(
-        self, book_chapters, book_info, book_path: str
-    ) -> tuple[str | None, list[dict[str, str]]]:
+        self, book_chapters: list[Chapter], book_info, book_path: str
+    ) -> tuple[str, list[Chapter]]:
         cover = self.get_default_cover(book_info)
+
         assert self.parser is not None
         parsed_html = self.parser.parse_html(
             html.fromstring(
                 '<div id="sbo-rt-content"><img src="Images/{0}"></div>'.format(cover)
             ),
-            True,
+            is_first_page=True,
             html_filename="",
             chapter_title="",
             chapter_stylesheets=[],
@@ -171,6 +174,7 @@ class Downloader:
             book_path, filename, parsed_html.page_css, parsed_html.xhtml
         )
 
+        assert parsed_html.cover_url
         return parsed_html.cover_url, book_chapters
 
     def get_book_info(self) -> dict[str, Any]:
@@ -191,7 +195,7 @@ class Downloader:
 
         return book_info
 
-    def get_book_chapters(self, page=1):
+    def get_book_chapters(self, page=1) -> list[Chapter]:
         response = self.session.requests_provider(
             urljoin(self.api_url, "chapter/?page=%s" % page)
         )
@@ -203,32 +207,32 @@ class Downloader:
         if not isinstance(response, dict) or len(response.keys()) == 1:
             self.logger.exit(self.logger.api_error(response))
 
-        if "results" not in response or not len(response["results"]):
+        if not response.get("results"):
             self.logger.exit("API: unable to retrieve book chapters.")
 
         if response["count"] > sys.getrecursionlimit():
             sys.setrecursionlimit(response["count"])
 
         covers, rest = [], []
-        for c in response["results"]:
-            if "cover" in c["filename"] or "cover" in c["title"]:
-                covers.append(c)
+        for chapter in response["results"]:
+            if "cover" in chapter["filename"] or "cover" in chapter["title"]:
+                covers.append(chapter)
             else:
-                rest.append(c)
+                rest.append(chapter)
 
         result = covers + rest
         return result + (self.get_book_chapters(page + 1) if response["next"] else [])
 
-    def get_default_cover(self, book_info) -> str | None:
+    def get_default_cover(self, book_info) -> str:
         if "cover" not in book_info:
-            return None
+            return "False"
 
         response = self.session.requests_provider(book_info["cover"], stream=True)
         if not response:
             self.logger.error(
                 "Error trying to retrieve the cover: %s" % book_info["cover"]
             )
-            return None
+            return "False"
 
         file_ext = response.headers["Content-Type"].split("/")[-1]
         with open(
@@ -309,7 +313,7 @@ class Downloader:
         self.logger.log("Created: %s" % filename)
 
     def download_chapters(
-        self, book_chapters: list[html.HtmlElement], book_path: str
+        self, book_chapters: list[Chapter], book_path: str
     ) -> str | None:
         book_cover = None
 
@@ -363,10 +367,10 @@ class Downloader:
 
         return book_cover
 
-    def api_v2(self, chapter: html.HtmlElement) -> bool:
+    def api_v2(self, chapter: Chapter) -> bool:
         return "v2" in chapter["content"]
 
-    def extract_images(self, chapter: html.HtmlElement) -> None:
+    def extract_images(self, chapter: Chapter) -> None:
         asset_base_url = chapter["asset_base_url"]
         if self.api_v2(chapter):
             asset_base_url = (
@@ -374,15 +378,15 @@ class Downloader:
                 + f"/api/v2/epubs/urn:orm:book:{self.book_id}/files"
             )
 
-        for img_url in chapter.get("images"):
+        for img_url in chapter.get("images", []):
             if self.api_v2(chapter):
                 self.images.append(asset_base_url + "/" + img_url)
             else:
                 self.images.append(urljoin(chapter["asset_base_url"], img_url))
 
-    def extract_stylesheets(self, chapter: html.HtmlElement) -> None:
-        self.chapter_stylesheets = [x["url"] for x in chapter.get("stylesheets")]
-        self.chapter_stylesheets.extend(chapter.get("site_styles"))
+    def extract_stylesheets(self, chapter: Chapter) -> None:
+        self.chapter_stylesheets = [x["url"] for x in chapter.get("stylesheets", [])]
+        self.chapter_stylesheets.extend(chapter.get("site_styles", []))
 
     def chapter_file_exists(self, book_path: str, chapter_filename: str) -> bool:
         return os.path.isfile(

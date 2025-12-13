@@ -53,10 +53,11 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": LOGIN_ENTRY_URL,
     "Upgrade-Insecure-Requests": "1",
-    "User-Agent":   "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+    "User-Agent": "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
 }
 
 COOKIE_FLOAT_MAX_AGE_PATTERN = re.compile(r"(max-age=\d*\.\d*)", re.IGNORECASE)
+
 
 class Downloader:
     def __init__(self, args, book_id: str, cred: tuple[str, str]):
@@ -67,13 +68,18 @@ class Downloader:
         self.epub = EPub(self.logger)
         self.oreilly = Oreilly(self.logger)
         self.css = []
+        self.skipped_chapter_download = False
+        self.created_chapter_directory = False
 
     def download(self):
+        self.css_path = ""
+        self.images_path = ""
+        self.chapter_stylesheets = []
+        self.css.clear()
+        self.images = []
         self.api_url = API_TEMPLATE.format(self.book_id)
         self.base_html = (
-            BASE_01_HTML
-            + (KINDLE_HTML if not self.args.kindle else "")
-            + BASE_02_HTML
+            BASE_01_HTML + (KINDLE_HTML if not self.args.kindle else "") + BASE_02_HTML
         )
 
         self.logger.intro()
@@ -106,18 +112,12 @@ class Downloader:
             state=True,
         )
 
-        self.css_path = ""
-        self.images_path = ""
-        self.chapter_stylesheets = []
-        self.css.clear()
-        self.images = []
-
-        base_url = book_info["web_url"]
-        cover = self.download_chapters(book_chapters, book_path, base_url)
+        book_base_url = book_info["web_url"]
+        cover = self.download_chapters(book_chapters, book_path, book_base_url)
 
         if not cover:
             cover, book_chapters = self.create_default_cover(
-                book_chapters, book_info, book_path, base_url
+                book_chapters, book_info, book_path, book_base_url
             )
 
         self.css_done_queue = Queue(0) if "win" not in sys.platform else WinQueue()
@@ -265,9 +265,7 @@ class Downloader:
     def do_login(self, email: str, password: str):
         response = self.requests_provider(LOGIN_ENTRY_URL)
         if not response:
-            self.logger.exit(
-                "Login: unable to reach Safari Books Online. Try again..."
-            )
+            self.logger.exit("Login: unable to reach Safari Books Online. Try again...")
 
         next_parameter = None
         try:
@@ -338,17 +336,13 @@ class Downloader:
         )  # TODO: save JWT Tokens and use the refresh_token to restore user session
         response = self.requests_provider(self.jwt["redirect_uri"])
         if not response:
-            self.logger.exit(
-                "Login: unable to reach Safari Books Online. Try again..."
-            )
+            self.logger.exit("Login: unable to reach Safari Books Online. Try again...")
 
     def check_login(self):
         response = self.requests_provider(urls.PROFILE_URL, perform_redirect=False)
 
         if not response:
-            self.logger.exit(
-                "Login: unable to reach Safari Books Online. Try again..."
-            )
+            self.logger.exit("Login: unable to reach Safari Books Online. Try again...")
 
         elif response.status_code != 200:
             self.logger.exit("Authentication issue: unable to access profile page.")
@@ -424,7 +418,7 @@ class Downloader:
 
         return "default_cover." + file_ext
 
-    def get_html(self, url, filename, chapter_title: str):
+    def get_html(self, url: str, filename: str, chapter_title: str):
         response = self.requests_provider(url)
         if not response or response.status_code != 200:
             self.logger.exit(
@@ -432,18 +426,14 @@ class Downloader:
                 % (filename, chapter_title, url)
             )
 
-        root = None
         try:
-            root = html.fromstring(response.text, base_url=urls.SAFARI_BASE_URL)
-
+            return html.fromstring(response.text, base_url=urls.SAFARI_BASE_URL)
         except (html.etree.ParseError, html.etree.ParserError) as parsing_error:
             self.logger.error(parsing_error)
             self.logger.exit(
                 "Crawler: error trying to parse this page: %s (%s)\n    From: %s"
                 % (filename, chapter_title, url)
             )
-
-        return root
 
     @staticmethod
     def escape_dirname(dirname, clean_space=False):
@@ -471,7 +461,7 @@ class Downloader:
 
         oebps = os.path.join(book_path, "OEBPS")
         if not os.path.isdir(oebps):
-            self.logger.book_ad_info = 1
+            self.created_chapter_directory = True
             os.makedirs(oebps)
 
         self.css_path = os.path.join(oebps, "Styles")
@@ -498,61 +488,35 @@ class Downloader:
         self.logger.log("Created: %s" % filename)
 
     def download_chapters(
-        self, book_chapters: list[html.HtmlElement], book_path: str, base_url: str
-    ) -> None:
+        self, book_chapters: list[html.HtmlElement], book_path: str, book_base_url: str
+    ) -> str | None:
         book_cover = None
 
         for i, chapter in enumerate(book_chapters):
-            chapter_title = chapter["title"]
             chapter_filename = chapter["filename"]
 
-            asset_base_url = chapter["asset_base_url"]
-            api_v2_detected = False
-            if "v2" in chapter["content"]:
-                asset_base_url = (
-                    urls.SAFARI_BASE_URL
-                    + "/api/v2/epubs/urn:orm:book:{}/files".format(self.book_id)
+            self.extract_images(chapter)
+            self.extract_stylesheets(chapter)
+
+            if not self.chapter_file_exists(book_path, chapter_filename):
+                is_first_page = i == 0
+                chapter_title = chapter["title"]
+
+                chapter_html = self.get_html(
+                    chapter["content"], chapter_filename, chapter_title
                 )
-                api_v2_detected = True
-
-            for img_url in chapter.get("images"):
-                if api_v2_detected:
-                    self.images.append(asset_base_url + "/" + img_url)
-                else:
-                    self.images.append(urljoin(chapter["asset_base_url"], img_url))
-
-            self.chapter_stylesheets = [x["url"] for x in chapter.get("stylesheets")]
-            self.chapter_stylesheets.extend(chapter.get("site_styles"))
-
-            if os.path.isfile(
-                os.path.join(
-                    book_path, "OEBPS", chapter_filename.replace(".html", ".xhtml")
-                )
-            ):
-                if not self.logger.book_ad_info and chapter not in book_chapters[:i]:
-                    self.logger.info(
-                        (
-                            "File `%s` already exists.\n"
-                            "    If you want to download again all the book,\n"
-                            "    please delete the output directory '"
-                            + book_path
-                            + "' and restart the program."
-                        )
-                        % chapter_filename.replace(".html", ".xhtml")
-                    )
-                    self.logger.book_ad_info = 2
-            else:
-                first_page = i == 0
                 parsed_html = self.oreilly.parse_html(
-                    self.get_html(chapter["content"], chapter_filename, chapter_title),
-                    first_page,
+                    chapter_html,
+                    is_first_page,
                     chapter_filename,
                     chapter_title,
                     self.chapter_stylesheets,
                     self.css,
-                    base_url,
+                    book_base_url,
                     self.book_id,
                 )
+
+                book_cover = parsed_html.cover_url
 
                 self.save_page_html(
                     book_path=book_path,
@@ -560,10 +524,52 @@ class Downloader:
                     css=parsed_html.page_css,
                     xhtml=parsed_html.xhtml,
                 )
+            elif (
+                not self.created_chapter_directory and not self.skipped_chapter_download
+            ):
+                self.logger.info(
+                    (
+                        "File `%s` already exists.\n"
+                        "    If you want to download again all the book,\n"
+                        "    please delete the output directory '"
+                        + book_path
+                        + "' and restart the program."
+                    )
+                    % chapter_filename.replace(".html", ".xhtml")
+                )
+                self.skipped_chapter_download = True
 
             self.logger.state(len(book_chapters), i + 1)
 
         return book_cover
+
+    def api_v2(self, chapter: html.HtmlElement) -> bool:
+        return "v2" in chapter["content"]
+
+    def extract_images(self, chapter: html.HtmlElement) -> None:
+        asset_base_url = chapter["asset_base_url"]
+        if self.api_v2(chapter):
+            asset_base_url = (
+                urls.SAFARI_BASE_URL
+                + f"/api/v2/epubs/urn:orm:book:{self.book_id}/files"
+            )
+
+        for img_url in chapter.get("images"):
+            if self.api_v2(chapter):
+                self.images.append(asset_base_url + "/" + img_url)
+            else:
+                self.images.append(urljoin(chapter["asset_base_url"], img_url))
+
+    def extract_stylesheets(self, chapter: html.HtmlElement) -> None:
+        self.chapter_stylesheets = [x["url"] for x in chapter.get("stylesheets")]
+        self.chapter_stylesheets.extend(chapter.get("site_styles"))
+
+    def chapter_file_exists(self, book_path: str, chapter_filename: str) -> bool:
+        return os.path.isfile(
+            os.path.join(
+                book_path, "OEBPS", chapter_filename.replace(".html", ".xhtml")
+            )
+        )
 
     def _thread_download_css(self, url, book_path: str):
         css_file = os.path.join(
@@ -659,7 +665,7 @@ class Downloader:
             self._thread_download_css(css_url, book_path)
 
     def collect_images(self, book_path: str):
-        if self.logger.book_ad_info == 2:
+        if self.skipped_chapter_download:
             self.logger.info(
                 "Some of the book contents were already downloaded.\n"
                 "    If you want to be sure that all the images will be downloaded,\n"

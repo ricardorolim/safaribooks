@@ -23,8 +23,7 @@ class Logger:
     SH_BG_YELLOW = "\033[43m" if "win" not in sys.platform else ""
 
     def __init__(self, log_file, cookies_file: str):
-        self.output_dir = ""
-        self.output_dir_set = False
+        self.output_dir = None
         self.log_file = os.path.join(project_root(), log_file)
 
         self.cookies_file = cookies_file
@@ -40,7 +39,6 @@ class Logger:
 
         self.logger.info("** Welcome to SafariBooks! **")
 
-        self.book_ad_info = 0
         self.css_ad_info = Value("i", 0)
         self.images_ad_info = Value("i", 0)
         self.last_request: tuple[Any, ...] = (None,)
@@ -49,10 +47,9 @@ class Logger:
         self.state_status = Value("i", 0)
         sys.excepthook = self.unhandled_exception
 
-    def set_output_dir(self, output_dir):
+    def set_output_dir(self, output_dir: str):
         self.info("Output directory:\n    %s" % output_dir)
         self.output_dir = output_dir
-        self.output_dir_set = True
 
     def unregister(self):
         self.logger.handlers[0].close()
@@ -95,7 +92,7 @@ class Logger:
     def exit(self, error):
         self.error(str(error))
 
-        if self.output_dir_set:
+        if self.output_dir:
             output = (
                 self.SH_YELLOW
                 + "[+]"

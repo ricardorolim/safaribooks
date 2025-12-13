@@ -1,6 +1,5 @@
 import os
 import sys
-from html import escape
 from multiprocessing import Process, Queue
 from typing import Any
 from urllib.parse import urljoin
@@ -11,7 +10,7 @@ import safaribooks.urls as urls
 from safaribooks.authentication import Authenticator
 from safaribooks.epub import EPub
 from safaribooks.logger import Logger
-from safaribooks.oreilly import ChapterParser
+from safaribooks.oreilly import OreillyParser
 from safaribooks.project_root import project_root
 from safaribooks.toc import TableOfContents
 
@@ -54,7 +53,7 @@ class Downloader:
         self.book_id = book_id
         self.logger = Logger("info_%s.log" % self.book_id, COOKIES_FILE)
         self.epub = EPub(self.logger)
-        self.parser: ChapterParser | None = None
+        self.parser: OreillyParser | None = None
         self.css = []
         self.skipped_chapter_download = False
         self.created_chapter_directory = False
@@ -102,7 +101,7 @@ class Downloader:
         )
 
         book_base_url = book_info["web_url"]
-        self.parser = ChapterParser(self.logger, book_base_url, self.book_id)
+        self.parser = OreillyParser(self.logger, book_base_url, self.book_id)
         cover = self.download_chapters(book_chapters, book_path)
 
         if not cover:
@@ -522,37 +521,9 @@ class Downloader:
                 " in order to complete the `.epub` creation!"
             )
 
-        navmap, children, depth = self.parse_toc(toc)
+        assert self.parser is not None
+        navmap, children, depth = self.parser.parse_toc(toc)
         return TableOfContents(navmap, children, depth)
-
-    @staticmethod
-    def parse_toc(lst, children=0, depth=0) -> tuple[str, int, int]:
-        navmap = ""
-        for cc in lst:
-            children += 1
-            if int(cc["depth"]) > depth:
-                depth = int(cc["depth"])
-
-            navmap += (
-                '<navPoint id="{0}" playOrder="{1}">'
-                "<navLabel><text>{2}</text></navLabel>"
-                '<content src="{3}"/>'.format(
-                    cc["fragment"] if len(cc["fragment"]) else cc["id"],
-                    children,
-                    escape(cc["label"]),
-                    cc["href"].replace(".html", ".xhtml").split("/")[-1],
-                )
-            )
-
-            if cc["children"]:
-                sr, children, depth = Downloader.parse_toc(
-                    cc["children"], children, depth
-                )
-                navmap += sr
-
-            navmap += "</navPoint>\n"
-
-        return navmap, children, depth
 
 
 class WinQueue(

@@ -1,4 +1,5 @@
 import pathlib
+from html import escape
 from random import random
 from typing import cast
 from urllib.parse import urljoin, urlparse
@@ -15,7 +16,7 @@ class ParsedHtml:
         self.xhtml = xhtml
 
 
-class ChapterParser:
+class OreillyParser:
     def __init__(self, display: Logger, base_url: str, book_id: int):
         self.logger = display
         self.base_url = base_url
@@ -203,3 +204,31 @@ class ChapterParser:
             return a[0]
 
         return None
+
+    def parse_toc(self, lst, children=0, depth=0) -> tuple[str, int, int]:
+        navmap = ""
+        for cc in lst:
+            children += 1
+            if int(cc["depth"]) > depth:
+                depth = int(cc["depth"])
+
+            navmap += (
+                '<navPoint id="{0}" playOrder="{1}">'
+                "<navLabel><text>{2}</text></navLabel>"
+                '<content src="{3}"/>'.format(
+                    cc["fragment"] if len(cc["fragment"]) else cc["id"],
+                    children,
+                    escape(cc["label"]),
+                    cc["href"].replace(".html", ".xhtml").split("/")[-1],
+                )
+            )
+
+            if cc["children"]:
+                sr, children, depth = self.parse_toc(
+                    cc["children"], children, depth
+                )
+                navmap += sr
+
+            navmap += "</navPoint>\n"
+
+        return navmap, children, depth

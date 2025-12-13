@@ -8,7 +8,7 @@ from safaribooks.urls import LEARNING_BASE_URL
 
 def main() -> None:
     args_parsed = parse_args(LEARNING_BASE_URL)
-    safari = Downloader(args_parsed, args_parsed.bookid, args_parsed.cred)
+    safari = Downloader(args_parsed, args_parsed.bookid)
     safari.download()
     sys.exit(0)
 

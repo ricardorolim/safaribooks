@@ -47,10 +47,9 @@ BASE_02_HTML = "</style></head>\n<body>{1}</body>\n</html>"
 
 
 class Downloader:
-    def __init__(self, args, book_id: int, cred: tuple[str, str]):
+    def __init__(self, args, book_id: int) -> None:
         self.args = args
         self.book_id = book_id
-        self.cred = cred
         self.logger = Logger("info_%s.log" % self.book_id, COOKIES_FILE)
         self.epub = EPub(self.logger)
         self.parser: ChapterParser | None = None
@@ -71,7 +70,7 @@ class Downloader:
 
         self.logger.intro()
         authenticator = Authenticator(self.logger)
-        self.session = authenticator.login(self.cred, COOKIES_FILE, self.args.no_cookies)
+        self.session = authenticator.login(COOKIES_FILE)
 
         self.logger.info("Retrieving book info...")
         book_info = self.get_book_info()
@@ -136,7 +135,9 @@ class Downloader:
             cover=cover,
         )
 
-        if not self.args.no_cookies:
+        if self.args.no_cookies:
+            os.remove(COOKIES_FILE)
+        else:
             self.session.save_cookies(COOKIES_FILE)
 
         self.logger.done(os.path.join(book_path, str(self.book_id) + ".epub"))

@@ -168,7 +168,7 @@ class EPub:
 
         return CONTENT_OPF.format(
             (book_info.get("isbn", book_id)),
-            escape(book_info["book_title"]),
+            escape(book_info["title"]),
             authors,
             escape(book_info.get("description", "")),
             subjects,
@@ -192,7 +192,7 @@ class EPub:
         return TOC_NCX.format(
             book_info.get("isbn", book_id),
             toc.depth,
-            book_info["book_title"],
+            book_info["title"],
             ", ".join(aut.get("name", "") for aut in book_info.get("authors", [])),
             toc.navmap,
         )

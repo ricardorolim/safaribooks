@@ -129,7 +129,6 @@ class Downloader:
             book_id=self.book_id,
             toc=toc,
             book_info=book_info,
-            book_title=book_info["title"],
             css_path=self.css_path,
             images_path=self.images_path,
             book_chapters=book_chapters,

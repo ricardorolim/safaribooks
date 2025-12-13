@@ -71,7 +71,6 @@ class EPub:
         book_id: int,
         toc: TableOfContents,
         book_info: dict[str, Any],
-        book_title: str,
         css_path: str,
         images_path: str,
         book_chapters: list[dict[str, Any]],
@@ -95,7 +94,6 @@ class EPub:
             book_chapters,
             book_info,
             book_id,
-            book_title,
             cover,
         )
 
@@ -104,7 +102,7 @@ class EPub:
         )
 
         open(os.path.join(book_path, "OEBPS", "toc.ncx"), "wb").write(
-            self.create_toc(toc, book_info, book_id, book_title).encode(
+            self.create_toc(toc, book_info, book_id).encode(
                 "utf-8", "xmlcharrefreplace"
             )
         )
@@ -123,7 +121,6 @@ class EPub:
         book_chapters: list[dict[str, Any]],
         book_info: dict[str, Any],
         book_id: int,
-        book_title: str,
         cover: str,
     ) -> str:
         css = next(os.walk(css_path))[2]
@@ -171,7 +168,7 @@ class EPub:
 
         return CONTENT_OPF.format(
             (book_info.get("isbn", book_id)),
-            escape(book_title),
+            escape(book_info["book_title"]),
             authors,
             escape(book_info.get("description", "")),
             subjects,
@@ -191,12 +188,11 @@ class EPub:
         toc: TableOfContents,
         book_info: dict[str, Any],
         book_id: int,
-        book_title: str,
     ) -> str:
         return TOC_NCX.format(
             book_info.get("isbn", book_id),
             toc.depth,
-            book_title,
+            book_info["book_title"],
             ", ".join(aut.get("name", "") for aut in book_info.get("authors", [])),
             toc.navmap,
         )

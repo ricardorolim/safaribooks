@@ -1,23 +1,20 @@
 import os
 import sys
-import re
-import json
-from typing import Any
-import requests
 from html import escape
 from multiprocessing import Process, Queue
-from urllib.parse import urljoin, urlparse, parse_qs, quote_plus
-from safaribooks.logger import Logger
+from typing import Any
+from urllib.parse import urljoin
+
 from lxml import html
 
+import safaribooks.urls as urls
+from safaribooks.authentication import Authenticator
 from safaribooks.epub import EPub
+from safaribooks.logger import Logger
 from safaribooks.oreilly import ChapterParser
 from safaribooks.project_root import project_root
 from safaribooks.toc import TableOfContents
-import safaribooks.urls as urls
 
-USE_PROXY = False
-PROXIES = {"https": "https://127.0.0.1:8080"}
 COOKIES_FILE = "cookies.json"
 
 LOGIN_URL = f"https://www.{urls.ORLY_DOMAIN}/member/login/"
@@ -47,16 +44,6 @@ KINDLE_HTML = (
 
 BASE_02_HTML = "</style></head>\n<body>{1}</body>\n</html>"
 
-HEADERS = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-    "Accept-Encoding": "gzip, deflate, br, zstd",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": LOGIN_ENTRY_URL,
-    "Upgrade-Insecure-Requests": "1",
-    "User-Agent": "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
-}
-
-COOKIE_FLOAT_MAX_AGE_PATTERN = re.compile(r"(max-age=\d*\.\d*)", re.IGNORECASE)
 
 
 class Downloader:
@@ -83,7 +70,8 @@ class Downloader:
         )
 
         self.logger.intro()
-        self.login()
+        authenticator = Authenticator(self.logger)
+        self.session = authenticator.login(self.cred, COOKIES_FILE, self.args.no_cookies)
 
         self.logger.info("Retrieving book info...")
         book_info = self.get_book_info()
@@ -149,7 +137,7 @@ class Downloader:
         )
 
         if not self.args.no_cookies:
-            json.dump(self.session.cookies.get_dict(), open(COOKIES_FILE, "w"))
+            self.session.save_cookies(COOKIES_FILE)
 
         self.logger.done(os.path.join(book_path, str(self.book_id) + ".epub"))
         self.logger.unregister()
@@ -184,176 +172,8 @@ class Downloader:
 
         return parsed_html.cover_url, book_chapters
 
-    def login(self):
-        self.session = requests.Session()
-        if USE_PROXY:  # DEBUG
-            self.session.proxies = PROXIES
-            self.session.verify = False
-
-        self.session.headers.update(HEADERS)
-
-        self.jwt = {}
-
-        if not self.cred:
-            if not os.path.isfile(COOKIES_FILE):
-                self.logger.exit(
-                    "Login: unable to find `cookies.json` file.\n"
-                    "    Please use the `--cred` or `--login` options to perform the login."
-                )
-
-            self.session.cookies.update(json.load(open(COOKIES_FILE)))
-
-        else:
-            self.logger.info("Logging into Safari Books Online...", state=True)
-            self.do_login(*self.cred)
-            if not self.args.no_cookies:
-                json.dump(self.session.cookies.get_dict(), open(COOKIES_FILE, "w"))
-
-        self.check_login()
-
-    def handle_cookie_update(self, set_cookie_headers):
-        for morsel in set_cookie_headers:
-            # Handle Float 'max-age' Cookie
-            if COOKIE_FLOAT_MAX_AGE_PATTERN.search(morsel):
-                cookie_key, cookie_value = morsel.split(";")[0].split("=")
-                self.session.cookies.set(cookie_key, cookie_value)
-
-    def requests_provider(
-        self, url, is_post=False, data=None, perform_redirect=True, **kwargs
-    ) -> requests.Response | None:
-        try:
-            if is_post:
-                response = self.session.post(
-                    url, data=data, allow_redirects=False, **kwargs
-                )
-            else:
-                response = self.session.get(
-                    url, data=data, allow_redirects=False, **kwargs
-                )
-
-            self.handle_cookie_update(response.raw.headers.getlist("Set-Cookie"))
-
-            self.logger.last_request = (
-                url,
-                data,
-                kwargs,
-                response.status_code,
-                "\n".join(["\t{}: {}".format(*h) for h in response.headers.items()]),
-                response.text,
-            )
-
-        except (
-            requests.ConnectionError,
-            requests.ConnectTimeout,
-            requests.RequestException,
-        ) as request_exception:
-            self.logger.error(str(request_exception))
-            return
-
-        if response.is_redirect and perform_redirect:
-            if not response.next:
-                self.logger.error("Redirect expected but no redirect URL found")
-                return
-
-            return self.requests_provider(
-                response.next.url, is_post, None, perform_redirect
-            )
-            # TODO: How about **kwargs?
-
-        return response
-
-    def do_login(self, email: str, password: str):
-        response = self.requests_provider(LOGIN_ENTRY_URL)
-        if not response:
-            self.logger.exit("Login: unable to reach Safari Books Online. Try again...")
-
-        next_parameter = None
-        try:
-            url = response.request.url
-            if not url:
-                self.logger.exit("Login: url not found in request")
-
-            query = parse_qs(urlparse(url).query)
-            next_parameter = query["next"][0]
-
-        except (AttributeError, ValueError, IndexError):
-            self.logger.exit(
-                "Login: unable to complete login on Safari Books Online. Try again..."
-            )
-
-        redirect_uri = urls.API_ORIGIN_URL + quote_plus(next_parameter)
-
-        response = self.requests_provider(
-            LOGIN_URL,
-            is_post=True,
-            json={"email": email, "password": password, "redirect_uri": redirect_uri},
-            perform_redirect=False,
-        )
-
-        if not response:
-            self.logger.exit(
-                "Login: unable to perform auth to Safari Books Online.\n    Try again..."
-            )
-
-        if response.status_code != 200:  # TODO: To be reviewed
-            try:
-                error_page = html.fromstring(response.text)
-                errors_message = error_page.xpath("//ul[@class='errorlist']//li/text()")
-                recaptcha = error_page.xpath("//div[@class='g-recaptcha']")
-                messages = (
-                    [
-                        "    `%s`" % error
-                        for error in errors_message
-                        if "password" in error or "email" in error
-                    ]
-                    if errors_message
-                    else []
-                ) + (
-                    ["    `ReCaptcha required (wait or do logout from the website).`"]
-                    if recaptcha
-                    else []
-                )
-                self.logger.exit(
-                    "Login: unable to perform auth login to Safari Books Online.\n"
-                    + self.logger.SH_YELLOW
-                    + "[*]"
-                    + self.logger.SH_DEFAULT
-                    + " Details:\n"
-                    + "%s"
-                    % "\n".join(
-                        messages if len(messages) else ["    Unexpected error!"]
-                    )
-                )
-            except (html.etree.ParseError, html.etree.ParserError) as parsing_error:
-                self.logger.error(parsing_error)
-                self.logger.exit(
-                    "Login: your login went wrong and it encountered in an error"
-                    " trying to parse the login details of Safari Books Online. Try again..."
-                )
-
-        self.jwt = (
-            response.json()
-        )  # TODO: save JWT Tokens and use the refresh_token to restore user session
-        response = self.requests_provider(self.jwt["redirect_uri"])
-        if not response:
-            self.logger.exit("Login: unable to reach Safari Books Online. Try again...")
-
-    def check_login(self):
-        response = self.requests_provider(urls.PROFILE_URL, perform_redirect=False)
-
-        if not response:
-            self.logger.exit("Login: unable to reach Safari Books Online. Try again...")
-
-        elif response.status_code != 200:
-            self.logger.exit("Authentication issue: unable to access profile page.")
-
-        elif 'user_type":"Expired"' in response.text:
-            self.logger.exit("Authentication issue: account subscription expired.")
-
-        self.logger.info("Successfully authenticated.", state=True)
-
     def get_book_info(self) -> dict[str, Any]:
-        response = self.requests_provider(self.api_url)
+        response = self.session.requests_provider(self.api_url)
         if not response:
             self.logger.exit("API: unable to retrieve book info.")
 
@@ -371,7 +191,7 @@ class Downloader:
         return book_info
 
     def get_book_chapters(self, page=1):
-        response = self.requests_provider(
+        response = self.session.requests_provider(
             urljoin(self.api_url, "chapter/?page=%s" % page)
         )
         if not response:
@@ -402,7 +222,7 @@ class Downloader:
         if "cover" not in book_info:
             return None
 
-        response = self.requests_provider(book_info["cover"], stream=True)
+        response = self.session.requests_provider(book_info["cover"], stream=True)
         if not response:
             self.logger.error(
                 "Error trying to retrieve the cover: %s" % book_info["cover"]
@@ -419,7 +239,7 @@ class Downloader:
         return "default_cover." + file_ext
 
     def get_html(self, url: str, filename: str, chapter_title: str):
-        response = self.requests_provider(url)
+        response = self.session.requests_provider(url)
         if not response or response.status_code != 200:
             self.logger.exit(
                 "Crawler: error trying to retrieve this page: %s (%s)\n    From: %s"
@@ -591,7 +411,7 @@ class Downloader:
                 self.logger.css_ad_info.value = 1
 
         else:
-            response = self.requests_provider(url)
+            response = self.session.requests_provider(url)
             if not response:
                 self.logger.error(
                     "Error trying to retrieve this CSS: %s\n    From: %s"
@@ -624,7 +444,7 @@ class Downloader:
                 self.logger.images_ad_info.value = 1
 
         else:
-            response = self.requests_provider(
+            response = self.session.requests_provider(
                 urljoin(urls.SAFARI_BASE_URL, url), stream=True
             )
             if not response:
@@ -680,7 +500,7 @@ class Downloader:
             self._thread_download_images(image_url, book_path)
 
     def download_toc(self) -> TableOfContents:
-        response = self.requests_provider(urljoin(self.api_url, "toc/"))
+        response = self.session.requests_provider(urljoin(self.api_url, "toc/"))
         if not response:
             self.logger.exit(
                 "API: unable to retrieve book chapters. "

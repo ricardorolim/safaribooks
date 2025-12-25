@@ -68,7 +68,7 @@ class EPub:
     def create_epub(
         self,
         book_path: str,
-        book_id: int,
+        book_id: str,
         toc: TableOfContents,
         book_info: dict[str, Any],
         css_path: str,
@@ -120,7 +120,7 @@ class EPub:
         images_path: str,
         book_chapters: list[dict[str, Any]],
         book_info: dict[str, Any],
-        book_id: int,
+        book_id: str,
         cover: str,
     ) -> str:
         css = next(os.walk(css_path))[2]
@@ -187,7 +187,7 @@ class EPub:
         self,
         toc: TableOfContents,
         book_info: dict[str, Any],
-        book_id: int,
+        book_id: str,
     ) -> str:
         return TOC_NCX.format(
             book_info.get("isbn", book_id),

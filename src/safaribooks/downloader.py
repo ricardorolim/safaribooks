@@ -48,7 +48,7 @@ Chapter = dict[str, Any]
 
 
 class Downloader:
-    def __init__(self, args, book_id: int) -> None:
+    def __init__(self, args, book_id: str) -> None:
         self.args = args
         self.book_id = book_id
         self.logger = Logger("info_%s.log" % self.book_id, COOKIES_FILE)

@@ -35,7 +35,7 @@ def parse_args(orly_base_url: str) -> argparse.Namespace:
     )
     arguments.add_argument(
         "bookid",
-        type=int,
+        type=str,
         metavar="<BOOK ID>",
         help="Book digits ID that you want to download. You can find it in the URL (X-es):"
         f" `{orly_base_url}/library/view/book-name/XXXXXXXXXXXXX/`",

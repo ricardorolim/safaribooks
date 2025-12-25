@@ -17,7 +17,7 @@ class ParsedHtml:
 
 
 class OreillyParser:
-    def __init__(self, display: Logger, base_url: str, book_id: int):
+    def __init__(self, display: Logger, base_url: str, book_id: str):
         self.logger = display
         self.base_url = base_url
         self.book_id = book_id
@@ -160,7 +160,7 @@ class OreillyParser:
     def is_image_link(url: str) -> bool:
         return pathlib.Path(url).suffix[1:].lower() in ["jpg", "jpeg", "png", "gif"]
 
-    def link_replace(self, link: str, book_id: int) -> str:
+    def link_replace(self, link: str, book_id: str) -> str:
         if link and not link.startswith("mailto"):
             if not self.url_is_absolute(link):
                 if any(

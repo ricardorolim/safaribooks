@@ -75,7 +75,8 @@ class Downloader:
         self.logger.info("Retrieving book chapters...")
         book_chapters = self.get_chapters(api_url)
 
-        book_path = self.create_book_dirs(book_info["title"])
+        book_path = self.make_book_path(book_info["title"])
+        self.create_book_dirs(book_path)
 
         self.logger.set_output_dir(book_path)
         self.logger.info(
@@ -262,16 +263,19 @@ class Downloader:
 
         return dirname if not clean_space else dirname.replace(" ", "")
 
-    def create_book_dirs(self, book_title: str) -> str:
+    def make_book_path(self, book_title: str) -> str:
         clean_book_title = "".join(
             self.escape_dirname(book_title).split(",")[:2]
         ) + " ({0})".format(self.book_id)
 
         books_dir = os.path.join(project_root(), "Books")
+        book_path = os.path.join(books_dir, clean_book_title)
+        return book_path
+
+    def create_book_dirs(self, book_path: str) -> str:
+        books_dir = os.path.join(project_root(), "Books")
         if not os.path.isdir(books_dir):
             os.mkdir(books_dir)
-
-        book_path = os.path.join(books_dir, clean_book_title)
 
         if os.path.isdir(book_path):
             self.logger.log("Book directory already exists: %s" % book_path)

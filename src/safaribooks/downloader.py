@@ -16,11 +16,9 @@ from safaribooks.toc import TableOfContents
 
 COOKIES_FILE = "cookies.json"
 
-LOGIN_URL = f"https://www.{urls.ORLY_DOMAIN}/member/login/"
-LOGIN_ENTRY_URL = urls.SAFARI_BASE_URL + "/login/unified/?next=/home/"
 API_TEMPLATE = urls.SAFARI_BASE_URL + "/api/v1/book/{0}/"
 
-BASE_01_HTML = (
+BASE_HTML_PREFIX = (
     "<!DOCTYPE html>\n"
     '<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml"'
     ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"'
@@ -41,7 +39,7 @@ KINDLE_HTML = (
     "overflow-y:unset!important;white-space:pre-wrap!important;}}"
 )
 
-BASE_02_HTML = "</style></head>\n<body>{1}</body>\n</html>"
+BASE_HTML_SUFFIX = "</style></head>\n<body>{1}</body>\n</html>"
 
 
 Chapter = dict[str, Any]
@@ -65,9 +63,7 @@ class Downloader:
         self.css.clear()
         self.images = []
         self.api_url = API_TEMPLATE.format(self.book_id)
-        self.base_html = (
-            BASE_01_HTML + (KINDLE_HTML if not self.args.kindle else "") + BASE_02_HTML
-        )
+        self.base_html = self.make_base_html(self.args.kindle)
 
         self.logger.intro()
         authenticator = Authenticator(self.logger)
@@ -145,6 +141,10 @@ class Downloader:
 
         if not self.logger.in_error and not self.args.log:
             os.remove(self.logger.log_file)
+
+    def make_base_html(self, kindle: bool) -> str:
+        base_html_center = KINDLE_HTML if kindle else ""
+        return BASE_HTML_PREFIX + base_html_center + BASE_HTML_SUFFIX
 
     def create_default_cover(
         self, book_chapters: list[Chapter], book_info, book_path: str

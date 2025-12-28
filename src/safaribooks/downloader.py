@@ -51,7 +51,6 @@ class Downloader:
         self.book_id = book_id
         self.logger = Logger("info_%s.log" % self.book_id, COOKIES_FILE)
         self.epub = EPub(self.logger)
-        self.parser: OreillyParser | None = None
         self.css = []
         self.skipped_chapter_download = False
         self.created_chapter_directory = False
@@ -88,27 +87,27 @@ class Downloader:
         )
 
         book_base_url = book_info["web_url"]
-        self.parser = OreillyParser(self.logger, book_base_url, self.book_id)
-        cover = self.download_chapters(book_chapters, book_path)
+        parser = OreillyParser(self.logger, book_base_url, self.book_id)
+        cover = self.download_chapters(parser, book_chapters, book_path)
 
         if not cover:
             cover, book_chapters = self.create_default_cover(
-                book_chapters, book_info, book_path
+                parser, book_chapters, book_info, book_path
             )
 
         self.css_done_queue = Queue(0) if "win" not in sys.platform else WinQueue()
         self.logger.info(
             "Downloading book CSSs... (%s files)" % len(self.css), state=True
         )
-        self.collect_css(book_path)
+        self.download_css(book_path)
 
         self.images_done_queue = Queue(0) if "win" not in sys.platform else WinQueue()
         self.logger.info(
             "Downloading book images... (%s files)" % len(self.images), state=True
         )
-        self.collect_images(book_path)
+        self.download_images(book_path)
 
-        toc = self.download_toc(api_url)
+        toc = self.download_toc(parser, api_url)
 
         self.logger.info("Creating EPUB file...", state=True)
         self.epub.create_epub(
@@ -122,28 +121,22 @@ class Downloader:
             cover=cover,
         )
 
-        if self.args.no_cookies:
-            os.remove(COOKIES_FILE)
-        else:
-            self.session.save_cookies(COOKIES_FILE)
-
-        self.logger.done(os.path.join(book_path, str(self.book_id) + ".epub"))
-        self.logger.unregister()
-
-        if not self.logger.in_error and not self.args.log:
-            os.remove(self.logger.log_file)
+        self.cleanup(book_path)
 
     def make_base_html(self, kindle: bool) -> str:
         base_html_center = KINDLE_HTML if kindle else ""
         return BASE_HTML_PREFIX + base_html_center + BASE_HTML_SUFFIX
 
     def create_default_cover(
-        self, book_chapters: list[Chapter], book_info, book_path: str
+        self,
+        parser: OreillyParser,
+        book_chapters: list[Chapter],
+        book_info,
+        book_path: str,
     ) -> tuple[str, list[Chapter]]:
         cover = self.get_default_cover(book_info)
 
-        assert self.parser is not None
-        parsed_html = self.parser.parse_html(
+        parsed_html = parser.parse_html(
             html.fromstring(
                 '<div id="sbo-rt-content"><img src="Images/{0}"></div>'.format(cover)
             ),
@@ -316,7 +309,7 @@ class Downloader:
         self.logger.log("Created: %s" % filename)
 
     def download_chapters(
-        self, book_chapters: list[Chapter], book_path: str
+        self, parser: OreillyParser, book_chapters: list[Chapter], book_path: str
     ) -> str | None:
         book_cover = None
 
@@ -333,8 +326,7 @@ class Downloader:
                 chapter_html = self.get_html(
                     chapter["content"], chapter_filename, chapter_title
                 )
-                assert self.parser is not None
-                parsed_html = self.parser.parse_html(
+                parsed_html = parser.parse_html(
                     chapter_html,
                     is_first_page,
                     chapter_filename,
@@ -484,14 +476,14 @@ class Downloader:
             for proc in process_queue:
                 proc.join()
 
-    def collect_css(self, book_path: str):
+    def download_css(self, book_path: str):
         self.logger.state_status.value = -1
 
         # "self._start_multiprocessing" seems to cause problem. Switching to mono-thread download.
         for css_url in self.css:
             self._thread_download_css(css_url, book_path)
 
-    def collect_images(self, book_path: str):
+    def download_images(self, book_path: str):
         if self.skipped_chapter_download:
             self.logger.info(
                 "Some of the book contents were already downloaded.\n"
@@ -507,7 +499,7 @@ class Downloader:
         for image_url in self.images:
             self._thread_download_images(image_url, book_path)
 
-    def download_toc(self, api_url: str) -> TableOfContents:
+    def download_toc(self, parser: OreillyParser, api_url: str) -> TableOfContents:
         response = self.session.requests_provider(urljoin(api_url, "toc/"))
         if not response:
             self.logger.exit(
@@ -525,9 +517,20 @@ class Downloader:
                 " in order to complete the `.epub` creation!"
             )
 
-        assert self.parser is not None
-        navmap, children, depth = self.parser.parse_toc(toc)
+        navmap, children, depth = parser.parse_toc(toc)
         return TableOfContents(navmap, children, depth)
+
+    def cleanup(self, book_path: str) -> None:
+        if self.args.no_cookies:
+            os.remove(COOKIES_FILE)
+        else:
+            self.session.save_cookies(COOKIES_FILE)
+
+        self.logger.done(os.path.join(book_path, str(self.book_id) + ".epub"))
+        self.logger.unregister()
+
+        if not self.logger.in_error and not self.args.log:
+            os.remove(self.logger.log_file)
 
 
 class WinQueue(

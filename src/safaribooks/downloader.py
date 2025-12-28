@@ -73,10 +73,7 @@ class Downloader:
         self.logger.book_info(book_info)
 
         self.logger.info("Retrieving book chapters...")
-        book_chapters = self.get_book_chapters(api_url)
-
-        if len(book_chapters) > sys.getrecursionlimit():
-            sys.setrecursionlimit(len(book_chapters))
+        book_chapters = self.get_chapters(api_url)
 
         book_path = self.create_book_dirs(book_info["title"])
 
@@ -177,35 +174,39 @@ class Downloader:
 
         return book_info
 
-    def get_book_chapters(self, api_url: str, page: int = 1) -> list[Chapter]:
-        response = self.session.requests_provider(
-            urljoin(api_url, "chapter/?page=%s" % page)
-        )
-        if not response:
-            self.logger.exit("API: unable to retrieve book chapters.")
+    def get_chapters(self, api_url: str, page: int = 1) -> list[Chapter]:
+        chapters = []
 
-        response = response.json()
+        while True:
+            response = self.session.requests_provider(
+                urljoin(api_url, "chapter/?page=%s" % page)
+            )
+            if not response:
+                self.logger.exit("API: unable to retrieve book chapters.")
 
-        if not isinstance(response, dict) or len(response.keys()) == 1:
-            self.logger.exit(self.logger.api_error(response))
+            response = response.json()
 
-        if not response.get("results"):
-            self.logger.exit("API: unable to retrieve book chapters.")
+            if not isinstance(response, dict) or len(response.keys()) == 1:
+                self.logger.exit(self.logger.api_error(response))
 
-        if response["count"] > sys.getrecursionlimit():
-            sys.setrecursionlimit(response["count"])
+            if not response.get("results"):
+                self.logger.exit("API: unable to retrieve book chapters.")
 
-        covers, rest = [], []
-        for chapter in response["results"]:
-            if "cover" in chapter["filename"] or "cover" in chapter["title"]:
-                covers.append(chapter)
-            else:
-                rest.append(chapter)
+            covers, rest = [], []
+            for chapter in response["results"]:
+                if "cover" in chapter["filename"] or "cover" in chapter["title"]:
+                    covers.append(chapter)
+                else:
+                    rest.append(chapter)
 
-        result = covers + rest
-        return result + (
-            self.get_book_chapters(api_url, page + 1) if response["next"] else []
-        )
+            chapters.extend(covers)
+            chapters.extend(rest)
+
+            page += 1
+
+            if not response["next"]:
+                return chapters
+
 
     def get_default_cover(self, book_info) -> str:
         if "cover" not in book_info:

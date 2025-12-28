@@ -57,12 +57,11 @@ class Downloader:
         self.created_chapter_directory = False
 
     def download(self):
-        self.css_path = ""
         self.images_path = ""
-        self.chapter_stylesheets = []
-        self.css.clear()
         self.images = []
-        self.api_url = API_TEMPLATE.format(self.book_id)
+        self.css_path = ""
+        self.css.clear()
+        self.chapter_stylesheets = []
         self.base_html = self.make_base_html(self.args.kindle)
 
         self.logger.intro()
@@ -70,11 +69,12 @@ class Downloader:
         self.session = authenticator.login(COOKIES_FILE)
 
         self.logger.info("Retrieving book info...")
-        book_info = self.get_book_info()
+        api_url = API_TEMPLATE.format(self.book_id)
+        book_info = self.get_book_info(api_url)
         self.logger.book_info(book_info)
 
         self.logger.info("Retrieving book chapters...")
-        book_chapters = self.get_book_chapters()
+        book_chapters = self.get_book_chapters(api_url)
 
         if len(book_chapters) > sys.getrecursionlimit():
             sys.setrecursionlimit(len(book_chapters))
@@ -117,7 +117,7 @@ class Downloader:
         )
         self.collect_images(book_path)
 
-        toc = self.download_toc()
+        toc = self.download_toc(api_url)
 
         self.logger.info("Creating EPUB file...", state=True)
         self.epub.create_epub(
@@ -175,8 +175,8 @@ class Downloader:
         assert parsed_html.cover_url
         return parsed_html.cover_url, book_chapters
 
-    def get_book_info(self) -> dict[str, Any]:
-        response = self.session.requests_provider(self.api_url)
+    def get_book_info(self, api_url: str) -> dict[str, Any]:
+        response = self.session.requests_provider(api_url)
         if not response:
             self.logger.exit("API: unable to retrieve book info.")
 
@@ -193,9 +193,9 @@ class Downloader:
 
         return book_info
 
-    def get_book_chapters(self, page=1) -> list[Chapter]:
+    def get_book_chapters(self, api_url: str, page: int = 1) -> list[Chapter]:
         response = self.session.requests_provider(
-            urljoin(self.api_url, "chapter/?page=%s" % page)
+            urljoin(api_url, "chapter/?page=%s" % page)
         )
         if not response:
             self.logger.exit("API: unable to retrieve book chapters.")
@@ -219,7 +219,9 @@ class Downloader:
                 rest.append(chapter)
 
         result = covers + rest
-        return result + (self.get_book_chapters(page + 1) if response["next"] else [])
+        return result + (
+            self.get_book_chapters(api_url, page + 1) if response["next"] else []
+        )
 
     def get_default_cover(self, book_info) -> str:
         if "cover" not in book_info:
@@ -502,8 +504,8 @@ class Downloader:
         for image_url in self.images:
             self._thread_download_images(image_url, book_path)
 
-    def download_toc(self) -> TableOfContents:
-        response = self.session.requests_provider(urljoin(self.api_url, "toc/"))
+    def download_toc(self, api_url: str) -> TableOfContents:
+        response = self.session.requests_provider(urljoin(api_url, "toc/"))
         if not response:
             self.logger.exit(
                 "API: unable to retrieve book chapters. "

@@ -79,16 +79,7 @@ class Downloader:
         if len(book_chapters) > sys.getrecursionlimit():
             sys.setrecursionlimit(len(book_chapters))
 
-        clean_book_title = "".join(
-            self.escape_dirname(book_info["title"]).split(",")[:2]
-        ) + " ({0})".format(self.book_id)
-
-        books_dir = os.path.join(project_root(), "Books")
-        if not os.path.isdir(books_dir):
-            os.mkdir(books_dir)
-
-        book_path = os.path.join(books_dir, clean_book_title)
-        self.create_book_dirs(book_path)
+        book_path = self.create_book_dirs(book_info["title"])
 
         self.logger.set_output_dir(book_path)
         self.logger.info(
@@ -277,7 +268,17 @@ class Downloader:
 
         return dirname if not clean_space else dirname.replace(" ", "")
 
-    def create_book_dirs(self, book_path: str):
+    def create_book_dirs(self, book_title: str) -> str:
+        clean_book_title = "".join(
+            self.escape_dirname(book_title).split(",")[:2]
+        ) + " ({0})".format(self.book_id)
+
+        books_dir = os.path.join(project_root(), "Books")
+        if not os.path.isdir(books_dir):
+            os.mkdir(books_dir)
+
+        book_path = os.path.join(books_dir, clean_book_title)
+
         if os.path.isdir(book_path):
             self.logger.log("Book directory already exists: %s" % book_path)
 
@@ -304,6 +305,8 @@ class Downloader:
         else:
             os.makedirs(self.images_path)
             self.logger.images_ad_info.value = 1
+
+        return book_path
 
     def save_page_html(self, book_path: str, filename, css, xhtml):
         filename = filename.replace(".html", ".xhtml")

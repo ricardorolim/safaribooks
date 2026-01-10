@@ -24,18 +24,18 @@ class OreillyParser:
 
     def parse_html(
         self,
-        root: html.HtmlElement,
+        root_element: html.HtmlElement,
         is_first_page: bool,
         html_filename: str,
         chapter_title: str,
         chapter_stylesheets: list[str],
         css_list: list[str],
     ) -> ParsedHtml:
-        if root.xpath("//div[@class='controls']/a/text()"):
+        if root_element.xpath("//div[@class='controls']/a/text()"):
             if random() > 0.8:
                 self.logger.exit(self.logger.api_error(" "))
 
-        book_content: list[html.HtmlElement] = root.xpath("//div[@id='sbo-rt-content']")
+        book_content: list[html.HtmlElement] = root_element.xpath("//div[@id='sbo-rt-content']")
         if not book_content:
             self.logger.exit(
                 "Parser: book content's corrupted or not present: %s (%s)"
@@ -55,7 +55,7 @@ class OreillyParser:
                 )
             )
 
-        stylesheet_links: list[html.HtmlElement] = root.xpath(
+        stylesheet_links: list[html.HtmlElement] = root_element.xpath(
             "//link[@rel='stylesheet']"
         )
         for e in stylesheet_links:
@@ -74,7 +74,7 @@ class OreillyParser:
                 'rel="stylesheet" type="text/css" />\n'.format(css_list.index(css_url))
             )
 
-        stylesheets = cast(list[html.HtmlElement], root.xpath("//style"))
+        stylesheets = cast(list[html.HtmlElement], root_element.xpath("//style"))
         for css_list in stylesheets:
             if "data-template" in css_list.attrib and css_list.attrib["data-template"]:
                 css_list.text = css_list.attrib["data-template"]
@@ -92,7 +92,7 @@ class OreillyParser:
                 )
 
         # TODO: add all not covered tag for `link_replace` function
-        svg_image_tags = root.xpath("//image")
+        svg_image_tags = root_element.xpath("//image")
         for img in svg_image_tags:
             image_attr_href = [x for x in img.attrib.keys() if "href" in x]
             if image_attr_href:

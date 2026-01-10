@@ -208,7 +208,6 @@ class Downloader:
             if not response["next"]:
                 return chapters
 
-
     def get_default_cover(self, book_info) -> str:
         if "cover" not in book_info:
             return "False"
@@ -319,11 +318,10 @@ class Downloader:
         book_cover = None
 
         for i, chapter in enumerate(book_chapters):
-            chapter_filename = chapter["filename"]
-
             self.extract_images(chapter)
             self.extract_stylesheets(chapter)
 
+            chapter_filename = chapter["filename"]
             if not self.chapter_file_exists(book_path, chapter_filename):
                 is_first_page = i == 0
                 chapter_title = chapter["title"]
@@ -367,22 +365,25 @@ class Downloader:
 
         return book_cover
 
-    def api_v2(self, chapter: Chapter) -> bool:
-        return "v2" in chapter["content"]
-
     def extract_images(self, chapter: Chapter) -> None:
+        base_url = self.get_base_url(chapter)
+
+        for img_url in chapter.get("images", []):
+            self.images.append(urljoin(base_url, img_url))
+
+    def get_base_url(self, chapter: Chapter) -> str:
         asset_base_url = chapter["asset_base_url"]
+
         if self.api_v2(chapter):
             asset_base_url = (
                 urls.SAFARI_BASE_URL
                 + f"/api/v2/epubs/urn:orm:book:{self.book_id}/files"
             )
 
-        for img_url in chapter.get("images", []):
-            if self.api_v2(chapter):
-                self.images.append(asset_base_url + "/" + img_url)
-            else:
-                self.images.append(urljoin(chapter["asset_base_url"], img_url))
+        return asset_base_url
+
+    def api_v2(self, chapter: Chapter) -> bool:
+        return "v2" in chapter["content"]
 
     def extract_stylesheets(self, chapter: Chapter) -> None:
         self.chapter_stylesheets = [x["url"] for x in chapter.get("stylesheets", [])]

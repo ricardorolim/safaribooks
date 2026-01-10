@@ -88,7 +88,7 @@ class EPub:
             CONTAINER_XML.encode("utf-8", "xmlcharrefreplace")
         )
 
-        content = self.create_content_opf(
+        content = self._create_content_opf(
             css_path,
             images_path,
             book_chapters,
@@ -102,7 +102,7 @@ class EPub:
         )
 
         open(os.path.join(book_path, "OEBPS", "toc.ncx"), "wb").write(
-            self.create_toc(toc, book_info, book_id).encode(
+            self._create_toc(toc, book_info, book_id).encode(
                 "utf-8", "xmlcharrefreplace"
             )
         )
@@ -114,7 +114,7 @@ class EPub:
         shutil.make_archive(zip_file, "zip", book_path)
         os.rename(zip_file + ".zip", os.path.join(book_path, str(book_id)) + ".epub")
 
-    def create_content_opf(
+    def _create_content_opf(
         self,
         css_path: str,
         images_path: str,
@@ -183,7 +183,7 @@ class EPub:
             book_chapters[0]["filename"].replace(".html", ".xhtml"),
         )
 
-    def create_toc(
+    def _create_toc(
         self,
         toc: TableOfContents,
         book_info: dict[str, Any],
@@ -196,3 +196,5 @@ class EPub:
             ", ".join(aut.get("name", "") for aut in book_info.get("authors", [])),
             toc.navmap,
         )
+
+

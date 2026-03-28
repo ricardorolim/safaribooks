@@ -20,7 +20,7 @@ class Session:
                 cookie_key, cookie_value = morsel.split(";")[0].split("=")
                 self.session.cookies.set(cookie_key, cookie_value)
 
-    def requests_provider(
+    def request(
         self, url, is_post=False, data=None, perform_redirect=True, **kwargs
     ) -> requests.Response | None:
         try:
@@ -57,12 +57,12 @@ class Session:
                 self.logger.error("Redirect expected but no redirect URL found")
                 return
 
-            return self.requests_provider(
+            return self.request(
                 response.next.url, is_post, None, perform_redirect
             )
             # TODO: How about **kwargs?
 
         return response
 
-    def save_cookies(self, cookies_file) -> None:
+    def save(self, cookies_file) -> None:
         json.dump(self.session.cookies.get_dict(), open(cookies_file, "w"))

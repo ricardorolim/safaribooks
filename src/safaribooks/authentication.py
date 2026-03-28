@@ -49,7 +49,7 @@ class Authenticator:
         return self.safari_session
 
     def check_login(self):
-        response = self.safari_session.requests_provider(urls.PROFILE_URL, perform_redirect=False)
+        response = self.safari_session.request(urls.PROFILE_URL, perform_redirect=False)
 
         if not response:
             self.logger.exit("Login: unable to reach Safari Books Online. Try again...")

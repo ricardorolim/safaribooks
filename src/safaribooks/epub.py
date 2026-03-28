@@ -65,7 +65,7 @@ class EPub:
     def __init__(self, logger: Logger) -> None:
         self.logger = logger
 
-    def create_epub(
+    def create(
         self,
         book_path: str,
         book_id: str,

@@ -60,7 +60,6 @@ class Downloader:
         self.images = []
         self.css_path = ""
         self.css.clear()
-        self.chapter_stylesheets = []
         self.base_html = self.make_base_html(self.args.kindle)
 
         self.logger.intro()
@@ -108,7 +107,7 @@ class Downloader:
         toc = self.download_toc(parser, api_url)
 
         self.logger.info("Creating EPUB file...", state=True)
-        self.epub.create_epub(
+        self.epub.create(
             book_path=book_path,
             book_id=self.book_id,
             toc=toc,
@@ -158,7 +157,7 @@ class Downloader:
         return parsed_html.cover_url, book_chapters
 
     def get_book_info(self, api_url: str) -> dict[str, Any]:
-        response = self.session.requests_provider(api_url)
+        response = self.session.request(api_url)
         if not response:
             self.logger.exit("API: unable to retrieve book info.")
 
@@ -179,7 +178,7 @@ class Downloader:
         chapters = []
 
         while True:
-            response = self.session.requests_provider(
+            response = self.session.request(
                 urljoin(api_url, "chapter/?page=%s" % page)
             )
             if not response:
@@ -212,7 +211,7 @@ class Downloader:
         if "cover" not in book_info:
             return "False"
 
-        response = self.session.requests_provider(book_info["cover"], stream=True)
+        response = self.session.request(book_info["cover"], stream=True)
         if not response:
             self.logger.error(
                 "Error trying to retrieve the cover: %s" % book_info["cover"]
@@ -229,7 +228,7 @@ class Downloader:
         return "default_cover." + file_ext
 
     def get_html(self, url: str, filename: str, chapter_title: str):
-        response = self.session.requests_provider(url)
+        response = self.session.request(url)
         if not response or response.status_code != 200:
             self.logger.exit(
                 "Crawler: error trying to retrieve this page: %s (%s)\n    From: %s"
@@ -305,21 +304,15 @@ class Downloader:
 
         return book_path
 
-    def save_page_html(self, book_path: str, filename, css, xhtml):
-        filename = filename.replace(".html", ".xhtml")
-        open(os.path.join(book_path, "OEBPS", filename), "wb").write(
-            self.base_html.format(css, xhtml).encode("utf-8", "xmlcharrefreplace")
-        )
-        self.logger.log("Created: %s" % filename)
-
     def download_chapters(
         self, parser: OreillyParser, book_chapters: list[Chapter], book_path: str
     ) -> str | None:
         book_cover = None
+        stylesheets = []
 
         for i, chapter in enumerate(book_chapters):
             self.extract_images(chapter)
-            self.extract_stylesheets(chapter)
+            stylesheets.extend(self.extract_stylesheets(chapter))
 
             chapter_filename = chapter["filename"]
             if not self.chapter_file_exists(book_path, chapter_filename):
@@ -334,7 +327,7 @@ class Downloader:
                     is_first_page,
                     chapter_filename,
                     chapter_title,
-                    self.chapter_stylesheets,
+                    stylesheets,
                     self.css,
                 )
 
@@ -385,9 +378,17 @@ class Downloader:
     def api_v2(self, chapter: Chapter) -> bool:
         return "v2" in chapter["content"]
 
-    def extract_stylesheets(self, chapter: Chapter) -> None:
-        self.chapter_stylesheets = [x["url"] for x in chapter.get("stylesheets", [])]
-        self.chapter_stylesheets.extend(chapter.get("site_styles", []))
+    def extract_stylesheets(self, chapter: Chapter) -> list[Any]:
+        stylesheets = [x["url"] for x in chapter.get("stylesheets", [])]
+        stylesheets.extend(chapter.get("site_styles", []))
+        return stylesheets
+
+    def save_page_html(self, book_path: str, filename, css, xhtml):
+        filename = filename.replace(".html", ".xhtml")
+        open(os.path.join(book_path, "OEBPS", filename), "wb").write(
+            self.base_html.format(css, xhtml).encode("utf-8", "xmlcharrefreplace")
+        )
+        self.logger.log("Created: %s" % filename)
 
     def chapter_file_exists(self, book_path: str, chapter_filename: str) -> bool:
         return os.path.isfile(
@@ -417,7 +418,7 @@ class Downloader:
                 self.logger.css_ad_info.value = 1
 
         else:
-            response = self.session.requests_provider(url)
+            response = self.session.request(url)
             if not response:
                 self.logger.error(
                     "Error trying to retrieve this CSS: %s\n    From: %s"
@@ -450,7 +451,7 @@ class Downloader:
                 self.logger.images_ad_info.value = 1
 
         else:
-            response = self.session.requests_provider(
+            response = self.session.request(
                 urljoin(urls.SAFARI_BASE_URL, url), stream=True
             )
             if not response:
@@ -506,7 +507,7 @@ class Downloader:
             self._thread_download_images(image_url, book_path)
 
     def download_toc(self, parser: OreillyParser, api_url: str) -> TableOfContents:
-        response = self.session.requests_provider(urljoin(api_url, "toc/"))
+        response = self.session.request(urljoin(api_url, "toc/"))
         if not response:
             self.logger.exit(
                 "API: unable to retrieve book chapters. "
@@ -530,7 +531,7 @@ class Downloader:
         if self.args.no_cookies:
             os.remove(COOKIES_FILE)
         else:
-            self.session.save_cookies(COOKIES_FILE)
+            self.session.save(COOKIES_FILE)
 
         self.logger.done(os.path.join(book_path, str(self.book_id) + ".epub"))
         self.logger.unregister()

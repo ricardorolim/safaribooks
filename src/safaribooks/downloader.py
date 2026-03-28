@@ -16,7 +16,9 @@ from safaribooks.toc import TableOfContents
 
 COOKIES_FILE = "cookies.json"
 
-API_TEMPLATE = urls.SAFARI_BASE_URL + "/api/v1/book/{0}/"
+API_TEMPLATE = urls.API_ORIGIN_URL + "/api/v1/book/{0}/"
+API_V2_TEMPLATE = urls.API_ORIGIN_URL + "/api/v2/epubs/urn:orm:book:{0}/"
+API_V2_SEARCH = urls.SAFARI_BASE_URL + "/api/v2/search/"
 
 BASE_HTML_PREFIX = (
     "<!DOCTYPE html>\n"
@@ -67,12 +69,18 @@ class Downloader:
         self.session = authenticator.login(COOKIES_FILE)
 
         self.logger.info("Retrieving book info...")
-        api_url = API_TEMPLATE.format(self.book_id)
+        api_url = API_V2_TEMPLATE.format(self.book_id)
         book_info = self.get_book_info(api_url)
         self.logger.book_info(book_info)
 
         self.logger.info("Retrieving book chapters...")
-        book_chapters = self.get_chapters(api_url)
+        page_url = book_info.get(
+            "chapters",
+            urls.API_ORIGIN_URL
+            + "/api/v2/epub-chapters/?epub_identifier=urn:orm:book:"
+            + self.book_id,
+        )
+        book_chapters = self.get_chapters(page_url)
 
         book_path = self.make_book_path(book_info["title"])
         self.create_book_dirs(book_path)
@@ -162,31 +170,62 @@ class Downloader:
             self.logger.exit("API: unable to retrieve book info.")
 
         book_info = response.json()
-        if not isinstance(book_info, dict) or len(book_info.keys()) == 1:
+        if not isinstance(book_info, dict) or "title" not in book_info:
             self.logger.exit(self.logger.api_error(book_info))
 
-        if "last_chapter_read" in book_info:
-            del book_info["last_chapter_read"]
+        search_meta = self.get_book_metadata()
 
-        for key, value in book_info.items():
+        # Build a v1-compatible book_info dict
+        description_html = book_info.get("descriptions", {}).get("text/html", "")
+        description_plain = book_info.get("descriptions", {}).get("text/plain", "")
+
+        info = {
+            "title": book_info.get("title", ""),
+            "identifier": book_info.get("identifier", self.book_id),
+            "isbn": book_info.get("isbn", ""),
+            "description": description_plain or description_html,
+            "issued": search_meta.get("issued", book_info.get("publication_date", "")),
+            "web_url": search_meta.get(
+                "web_url",
+                urls.SAFARI_BASE_URL + "/library/view/-/" + self.book_id + "/",
+            ),
+            "cover": search_meta.get("cover_url", ""),
+            "authors": [{"name": a} for a in search_meta.get("authors", [])],
+            "publishers": [{"name": p} for p in search_meta.get("publishers", [])],
+            "rights": search_meta.get("rights", ""),
+            "subjects": [],
+            "chapters": book_info.get("chapters", ""),
+        }
+
+        for key, value in info.items():
             if value is None:
-                book_info[key] = "n/a"
+                info[key] = "n/a"
 
-        return book_info
+        return info
 
-    def get_chapters(self, api_url: str, page: int = 1) -> list[Chapter]:
+    def get_book_metadata(self):
+        search_response = self.session.request(
+            API_V2_SEARCH + "?query=%s&limit=1&formats=book" % self.book_id
+        )
+        search_meta = {}
+        if search_response and search_response.status_code == 200:
+            search_data = search_response.json()
+            if "results" in search_data and search_data["results"]:
+                search_meta = search_data["results"][0]
+
+        return search_meta
+
+    def get_chapters(self, page_url: str) -> list[Chapter]:
         chapters = []
 
         while True:
-            response = self.session.request(
-                urljoin(api_url, "chapter/?page=%s" % page)
-            )
+            response = self.session.request(page_url)
             if not response:
                 self.logger.exit("API: unable to retrieve book chapters.")
 
             response = response.json()
 
-            if not isinstance(response, dict) or len(response.keys()) == 1:
+            if not isinstance(response, dict) or "results" not in response:
                 self.logger.exit(self.logger.api_error(response))
 
             if not response.get("results"):
@@ -194,6 +233,8 @@ class Downloader:
 
             covers, rest = [], []
             for chapter in response["results"]:
+                chapter = self.convert_to_v1_chapter(chapter)
+
                 if "cover" in chapter["filename"] or "cover" in chapter["title"]:
                     covers.append(chapter)
                 else:
@@ -202,10 +243,35 @@ class Downloader:
             chapters.extend(covers)
             chapters.extend(rest)
 
-            page += 1
-
             if not response["next"]:
                 return chapters
+
+            page_url = response["next"]
+
+    def convert_to_v1_chapter(self, chapter: dict) -> dict:
+        asset_base_url = (
+            urls.API_ORIGIN_URL
+            + "/api/v2/epubs/urn:orm:book:{}/files".format(self.book_id)
+        )
+
+        # Extract filename from the ourn (e.g. "urn:orm:book:...:chapter:cover.html" -> "cover.html")
+        filename = (
+            chapter["ourn"].split(":")[-1]
+            if ":" in chapter.get("ourn", "")
+            else chapter.get("reference_id", "").split("/")[-1]
+        )
+
+        related = chapter.get("related_assets", {})
+
+        return {
+            "title": chapter.get("title", ""),
+            "filename": filename,
+            "content": chapter.get("content_url", ""),
+            "asset_base_url": asset_base_url,
+            "images": [url.split("/files/")[-1] for url in related.get("images", [])],
+            "stylesheets": [{"url": url} for url in related.get("stylesheets", [])],
+            "site_styles": [],
+        }
 
     def get_default_cover(self, book_info) -> str:
         if "cover" not in book_info:
@@ -369,7 +435,7 @@ class Downloader:
 
         if self.api_v2(chapter):
             asset_base_url = (
-                urls.SAFARI_BASE_URL
+                urls.API_ORIGIN_URL
                 + f"/api/v2/epubs/urn:orm:book:{self.book_id}/files"
             )
 
@@ -507,7 +573,8 @@ class Downloader:
             self._thread_download_images(image_url, book_path)
 
     def download_toc(self, parser: OreillyParser, api_url: str) -> TableOfContents:
-        response = self.session.request(urljoin(api_url, "toc/"))
+        response = self.session.request(urljoin(api_url, "table-of-contents/"))
+
         if not response:
             self.logger.exit(
                 "API: unable to retrieve book chapters. "
@@ -524,8 +591,29 @@ class Downloader:
                 " in order to complete the `.epub` creation!"
             )
 
+        toc = Downloader._convert_toc_v2(toc)
+
         navmap, children, depth = parser.parse_toc(toc)
         return TableOfContents(navmap, children, depth)
+
+    @staticmethod
+    def _convert_toc_v2(items):
+        """Convert v2 TOC items to v1 format expected by parse_toc."""
+        result = []
+        for item in items:
+            ref_id = item.get("reference_id", "")
+            # Extract filename from reference_id (e.g. "9781098127091-/ch01.html" -> "ch01.html")
+            href = ref_id.split("/")[-1] if "/" in ref_id else ref_id
+            v1_item = {
+                "depth": item.get("depth", 1),
+                "fragment": item.get("fragment", ""),
+                "id": item.get("ourn", ref_id),
+                "label": item.get("title", ""),
+                "href": href,
+                "children": Downloader._convert_toc_v2(item.get("children", [])),
+            }
+            result.append(v1_item)
+        return result
 
     def cleanup(self, book_path: str) -> None:
         if self.args.no_cookies:

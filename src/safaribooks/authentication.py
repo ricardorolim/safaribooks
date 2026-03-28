@@ -1,6 +1,6 @@
 import json
 import os
-import requests
+from curl_cffi import requests
 
 from safaribooks import urls
 from safaribooks.logger import Logger
@@ -17,7 +17,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": LOGIN_ENTRY_URL,
     "Upgrade-Insecure-Requests": "1",
-    "User-Agent": "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
 }
 
 
@@ -26,7 +26,7 @@ class Authenticator:
         self.logger = logger
 
     def login(self, cookies_file: str) -> Session:
-        session = requests.Session()
+        session = requests.Session(impersonate='chrome120')
 
         if USE_PROXY:  # DEBUG
             session.proxies = PROXIES
@@ -40,7 +40,8 @@ class Authenticator:
                 "    Please use the `--cred` or `--login` options to perform the login."
             )
 
-        session.cookies.update(json.load(open(cookies_file)))
+        for name, value in json.load(open(cookies_file)).items():
+            session.cookies.set(name, value, domain="." + urls.ORLY_DOMAIN)
 
         self.safari_session = Session(self.logger, session)
 
@@ -49,7 +50,7 @@ class Authenticator:
         return self.safari_session
 
     def check_login(self):
-        response = self.safari_session.request(urls.PROFILE_URL, perform_redirect=False)
+        response = self.safari_session.request(urls.PROFILE_URL, perform_redirect=True)
 
         if not response:
             self.logger.exit("Login: unable to reach Safari Books Online. Try again...")

@@ -251,7 +251,7 @@ class Downloader:
     def convert_to_v1_chapter(self, chapter: dict) -> dict:
         asset_base_url = (
             urls.API_ORIGIN_URL
-            + "/api/v2/epubs/urn:orm:book:{}/files".format(self.book_id)
+            + "/api/v2/epubs/urn:orm:book:{}/files/".format(self.book_id)
         )
 
         # Extract filename from the ourn (e.g. "urn:orm:book:...:chapter:cover.html" -> "cover.html")
@@ -436,7 +436,7 @@ class Downloader:
         if self.api_v2(chapter):
             asset_base_url = (
                 urls.API_ORIGIN_URL
-                + f"/api/v2/epubs/urn:orm:book:{self.book_id}/files"
+                + f"/api/v2/epubs/urn:orm:book:{self.book_id}/files/"
             )
 
         return asset_base_url
@@ -517,9 +517,7 @@ class Downloader:
                 self.logger.images_ad_info.value = 1
 
         else:
-            response = self.session.request(
-                urljoin(urls.SAFARI_BASE_URL, url), stream=True
-            )
+            response = self.session.request(url, stream=True)
             if not response:
                 self.logger.error(
                     "Error trying to retrieve this image: %s\n    From: %s"
